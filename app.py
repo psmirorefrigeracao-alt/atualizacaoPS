@@ -35,7 +35,7 @@ def gerar_pdf_os(cliente, fone, email, data, status, df_itens, total, obs, valid
     pdf.cell(100, 10, "P&S REFRIGERACAO", ln=True, align='L')
     pdf.set_font("Arial", "", 10)
     pdf.cell(80)
-    pdf.cell(100, 5, f"CNPJ: {62967478000142}", ln=True, align='L') # CNPJ Fixo no PDF
+    pdf.cell(100, 5, f"CNPJ: 62.967.478.0001-42", ln=True, align='L') # CNPJ Fixo no PDF
     pdf.cell(80)
     pdf.cell(100, 5, "Especialista em Refrigeracao", ln=True, align='L')
     pdf.ln(15)
@@ -170,4 +170,5 @@ with aba_hist:
             
         st.dataframe(dados_historico, use_container_width=True, hide_index=True)
     except Exception as e:
+
         st.info("O histórico aparecerá aqui após o primeiro salvamento.")
