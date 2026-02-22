@@ -1,0 +1,1 @@
+Um app de criação de orçamentos e ordem de serviços ao qual é possivel criar/ editar/ excluir e também gera um histótico de orçamentod antigos ao qual possa pesquisar posteriormnte e uma aba financeira com dashboard das finanças baseadas nas informações prestadas nas abas 1 e 2
