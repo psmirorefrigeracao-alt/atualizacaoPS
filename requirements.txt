@@ -1,5 +1,4 @@
 streamlit
-st-gsheets-connection
 pandas
 fpdf
-
+psycopg2-binary
