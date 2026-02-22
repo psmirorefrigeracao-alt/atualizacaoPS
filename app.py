@@ -606,6 +606,7 @@ with tab2:
                     pdf_bytes,
                     file_name=f"ORC_{dados.get('ID','')}_{dados.get('Cliente','')}.pdf",
                     use_container_width=True,
+                    key=f"btn_pdf_{selecionado_id}"
                 )
 
             with col_edit:
