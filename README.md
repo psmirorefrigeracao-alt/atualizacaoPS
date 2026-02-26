@@ -1,1 +1,15 @@
-Um app de criação de orçamentos e ordem de serviços ao qual é possivel criar/ editar/ excluir e também gera um histótico de orçamentod antigos ao qual possa pesquisar posteriormnte e uma aba financeira com dashboard das finanças baseadas nas informações prestadas nas abas 1 e 2
+Sistema de Gestão - P&S Refrigeração
+Descrição: Aplicação desenvolvida para automatizar o controle de ordens de serviço e clientes da P&S Refrigeração.
+
+🛠️ Tecnologias Utilizadas:
+
+Linguagem: Python
+
+Interface: Streamlit
+
+Banco de Dados: Supabase (PostgreSQL)
+
+Relatórios: FPDF (Geração de PDFs)
+
+🧠 Desenvolvimento:
+Projeto desenvolvido com o auxílio de ferramentas de IA Generativa para agilizar a prototipagem e resolução de desafios técnicos, demonstrando competência em Prompt Engineering e integração de APIs.
