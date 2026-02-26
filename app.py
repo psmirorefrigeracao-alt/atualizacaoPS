@@ -53,7 +53,11 @@ st.markdown(
 .detalhe-card, .detalhe-card * { color:#111 !important; }
 .valor-card { color:green !important; font-size:22px; font-weight:bold; }
 .small-muted { opacity:.7; font-size:12px; }
-div[data-baseweb="select"] * { color: #111 !important; }
+div[data-baseweb="select"] > div {
+    background-color:#ffffff !important;
+}
+div[data-baseweb="select"] * {
+    color:#000000 !important;}
 </style>
 """,
     unsafe_allow_html=True,
@@ -93,11 +97,14 @@ def parse_data_ddmmyyyy(s: str):
 
 
 def get_logo_path() -> str:
-    """Prioriza PNG (recomendado)."""
-    if os.path.exists(LOGO_PNG):
-        return LOGO_PNG
-    if os.path.exists(LOGO_JPG):
-        return LOGO_JPG
+    """Busca a logo ignorando letras maiúsculas ou minúsculas (ex: Logo.PNG, logo.jpeg)."""
+    pastas_para_olhar = [ASSETS_DIR, BASE_DIR]
+    for pasta in pastas_para_olhar:
+        if os.path.exists(pasta):
+            for arquivo in os.listdir(pasta):
+                # Se o nome do arquivo contiver "logo" e for imagem, ele pega!
+                if "logo" in arquivo.lower() and arquivo.lower().endswith((".png", ".jpg", ".jpeg")):
+                    return os.path.join(pasta, arquivo)
     return ""
 
 
@@ -124,16 +131,28 @@ def formatar_id_pdf(os_id: str) -> str:
     return s
 
 
-def itens_json_para_df(itens_json: str) -> pd.DataFrame:
-    """Carrega ItensJSON para tabela."""
+def itens_json_para_df(itens_json: str, itens_txt: str = "", total_antigo: float = 0.0) -> pd.DataFrame:
+    """Carrega ItensJSON com fallback inteligente para recuperar o valor antigo."""
     try:
-        if not itens_json:
+        if not itens_json or str(itens_json).strip() in ["", "[]"]:
+            if itens_txt and str(itens_txt).strip():
+                lista = [i.strip() for i in str(itens_txt).split(",") if i.strip()]
+                df_lista = [{"Item": i, "Qtd": 1, "Valor Unit.": 0.0} for i in lista]
+                
+                # O PULO DO GATO: Se for um orçamento antigo, joga o valor total no 1º item 
+                # para a conta do orçamento não zerar!
+                if len(df_lista) > 0 and total_antigo > 0:
+                    df_lista[0]["Valor Unit."] = float(total_antigo)
+                    
+                return pd.DataFrame(df_lista)
             return pd.DataFrame(columns=["Item", "Qtd", "Valor Unit."])
+            
         registros = json.loads(itens_json)
         df = pd.DataFrame(registros)
         for c in ["Item", "Qtd", "Valor Unit."]:
             if c not in df.columns:
                 df[c] = "" if c == "Item" else 0
+                
         df["Item"] = df["Item"].astype(str)
         df["Qtd"] = pd.to_numeric(df["Qtd"], errors="coerce").fillna(1).astype(int)
         df["Valor Unit."] = pd.to_numeric(df["Valor Unit."], errors="coerce").fillna(0.0)
@@ -301,19 +320,6 @@ def gerar_pdf(os_id: str, cliente: str, whatsapp: str, data: str, status: str, d
     pdf = FPDF(format="A4")
     pdf.add_page()
 
-    logo_path = get_logo_path()
-
-    # Logo no topo com altura fixa (não tampa nada)
-    if logo_path and os.path.exists(logo_path):
-        header_h = 18  # ajuste fino: 16..24
-        try:
-            pdf.image(logo_path, x=10, y=6, h=header_h)
-            pdf.set_y(6 + header_h + 6)
-        except Exception:
-            pdf.set_y(20)
-    else:
-        pdf.set_y(20)
-
     # Cabeçalho limpo (sem OS)
     id_pdf = formatar_id_pdf(os_id)
 
@@ -423,8 +429,14 @@ with tab1:
             )
 
         # tabela inicial (mantém valores antigos na edição)
-        if editando and st.session_state.get("form_itens_json"):
-            df_init = itens_json_para_df(st.session_state["form_itens_json"])
+       
+        if editando:
+            df_init = itens_json_para_df(
+                st.session_state.get("form_itens_json", ""),
+                st.session_state.get("form_itens_txt", ""),
+                st.session_state.get("form_total_antigo", 0.0) 
+            )
+            
         else:
             df_init = pd.DataFrame([{"Item": "", "Qtd": 1, "Valor Unit.": 0.0}])
 
@@ -620,6 +632,11 @@ with tab2:
                     st.session_state["form_data"] = d if d else datetime.now().date()
 
                     st.session_state["form_itens_json"] = str(dados.get("ItensJSON", "") or "")
+                    
+                    st.session_state["form_itens_txt"] = str(dados.get("Itens", "") or "") 
+
+                    st.session_state["form_total_antigo"] = float(dados.get("Total_num", 0.0))
+
                     st.session_state["chave_tabela"] = str(uuid.uuid4())
                     st.rerun()
 
