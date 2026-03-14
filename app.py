@@ -202,7 +202,7 @@ def get_conn():
     if not db_url:
         st.error("Faltou configurar SUPABASE_DB_URL em Settings → Secrets no Streamlit Cloud.")
         st.stop()
-    st.info(f"Testando conexão com: {db_url[:45]}...")
+    
     return psycopg2.connect(db_url)
 
 
