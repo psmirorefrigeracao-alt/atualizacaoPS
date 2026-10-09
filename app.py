@@ -47,14 +47,28 @@ ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 STATUS_OPCOES = ["Pendente", "Aprovado", "Em Andamento", "Concluído", "Recusado", "Cancelado"]
 STATUS_ABERTOS = ["Pendente", "Aprovado", "Em Andamento"]
 STATUS_APROVADOS = ["Aprovado", "Em Andamento", "Concluído"]
+# Cores da marca (logo P&S)
+NOITE = "#060B16"
+PAINEL = "#0D1626"
+BORDA = "#1C2A40"
+GELO = "#1FA8FF"
+BRASA = "#FF8C1A"
+TINTA = "#E6EEF8"
+TINTA_SUAVE = "#93A6C1"
+DINHEIRO = "#3FD18F"
+
+# Status: paleta validada (daltonismo, contraste e brilho) sobre o fundo escuro.
+# ORDEM_GRAFICO é a ordem de empilhamento — evita cores parecidas lado a lado.
 CORES_STATUS = {
-    "Concluído": "#1E9E62",
-    "Em Andamento": "#2F6FD6",
-    "Aprovado": "#0FA3A3",
-    "Pendente": "#E3A008",
-    "Recusado": "#D64545",
-    "Cancelado": "#9AA4B2",
+    "Concluído": "#2A9F63",
+    "Em Andamento": "#4B74F0",
+    "Aprovado": "#0EA5A5",
+    "Pendente": "#CF7313",
+    "Cancelado": "#A07BDB",
+    "Recusado": "#E5466A",
 }
+ORDEM_GRAFICO = list(CORES_STATUS.keys())
+COR_OUTROS = "#6B7A90"
 
 # Colunas opcionais acrescentadas à tabela (criadas automaticamente se não existirem)
 COLUNAS_EXTRAS = {
@@ -65,11 +79,10 @@ COLUNAS_EXTRAS = {
     "resposta_em": "timestamptz",
     "resposta_obs": "text",
 }
-COR_OUTROS = "#6B7785"
 
-ABA_NOVO = "📝 Novo Serviço"
-ABA_HIST = "📂 Histórico"
-ABA_FIN = "📊 Financeiro"
+ABA_NOVO = ":material/note_add: Novo orçamento"
+ABA_HIST = ":material/folder_open: Histórico"
+ABA_FIN = ":material/monitoring: Financeiro"
 
 MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
 
@@ -82,25 +95,70 @@ COLUNAS_BASE = [
 
 CSS = """
 <style>
-.block-container { padding-top: 1.6rem; max-width: 1240px; }
-.app-header {
-    display: flex; align-items: center; gap: 16px;
-    padding: 18px 22px; margin-bottom: 14px; border-radius: 14px;
-    background: linear-gradient(135deg, #0B4F8A 0%, #1679C9 100%);
-    box-shadow: 0 6px 18px rgba(11, 79, 138, .18);
+:root {
+  --noite: #060B16; --painel: #0D1626; --painel-2: #111D31; --borda: #1C2A40;
+  --gelo: #1FA8FF; --brasa: #FF8C1A; --tinta: #E6EEF8; --tinta-suave: #93A6C1; --dinheiro: #3FD18F;
+  --termica: linear-gradient(90deg, #1FA8FF 0%, #39C6FF 38%, #FFB23F 72%, #FF8C1A 100%);
 }
-.app-header img { height: 52px; border-radius: 10px; background: #fff; padding: 4px; }
-.app-header .titulo { color: #fff; font-size: 1.55rem; font-weight: 700; line-height: 1.2; }
-.app-header .sub { color: rgba(255,255,255,.85); font-size: .92rem; }
-.badge {
-    display: inline-block; padding: 2px 11px; border-radius: 999px;
-    font-size: .78rem; font-weight: 600; color: #fff; vertical-align: middle;
+.stApp {
+  background:
+    radial-gradient(900px 420px at 8% -8%, rgba(31,168,255,.13), transparent 60%),
+    radial-gradient(700px 360px at 100% 0%, rgba(255,140,26,.07), transparent 60%),
+    var(--noite);
 }
-.rotulo { color: #6B7785; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
-.valor-grande { font-size: 1.9rem; font-weight: 700; color: #1E9E62; line-height: 1.2; }
-.linha-info { margin: 2px 0 8px 0; font-size: .98rem; }
-div[data-testid="stMetric"] { background: #FFFFFF; }
-div[data-testid="stMetricValue"] { font-size: 1.55rem; }
+.block-container { padding-top: 1.2rem; max-width: 1240px; }
+h1, h2, h3, h4, h5 { letter-spacing: .01em; }
+
+/* Cabeçalho da marca */
+.ps-hero { display: flex; align-items: center; gap: 18px; padding: 6px 2px 14px; }
+.ps-hero img { width: 82px; height: 82px; flex: none;
+  filter: drop-shadow(0 0 14px rgba(31,168,255,.35)); }
+.ps-nome { font-family: "Saira Semi Condensed", sans-serif; font-weight: 700; font-size: 1.75rem;
+  line-height: 1.05; color: var(--tinta); }
+.ps-slogan { margin-top: 4px; font-size: .78rem; letter-spacing: .32em; text-transform: uppercase;
+  color: var(--tinta-suave); }
+.ps-termica { height: 3px; border-radius: 3px; background: var(--termica); margin: 0 0 16px;
+  box-shadow: 0 0 14px rgba(31,168,255,.35), 0 0 14px rgba(255,140,26,.25); }
+@media (max-width: 640px) {
+  .ps-hero img { width: 60px; height: 60px; }
+  .ps-nome { font-size: 1.3rem; }
+  .ps-slogan { letter-spacing: .2em; font-size: .7rem; }
+}
+
+/* Abas: a aba ativa ganha a faixa térmica */
+.stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid var(--borda); }
+.stTabs button[data-baseweb="tab"] { font-family: "Saira Semi Condensed", sans-serif; font-size: 1.02rem;
+  font-weight: 600; padding: 8px 14px; color: var(--tinta-suave); }
+.stTabs button[data-baseweb="tab"][aria-selected="true"] { color: var(--tinta); }
+.stTabs [data-baseweb="tab-highlight"] { background: var(--termica); height: 3px; border-radius: 3px; }
+
+/* Indicadores */
+div[data-testid="stMetric"] { background: var(--painel); }
+div[data-testid="stMetricValue"] { font-family: "Saira Semi Condensed", sans-serif; font-size: 1.6rem; }
+div[data-testid="stMetricLabel"] p { color: var(--tinta-suave); }
+
+/* Selos de status e textos auxiliares */
+.badge { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: .8rem;
+  font-weight: 600; vertical-align: middle; border: 1px solid; }
+.rotulo { color: var(--tinta-suave); font-size: .82rem; margin-bottom: 1px; }
+.valor-grande { font-family: "Saira Semi Condensed", sans-serif; font-size: 2rem; font-weight: 700;
+  color: var(--dinheiro); line-height: 1.15; }
+.valor-sub { height: 2px; width: 64px; border-radius: 2px; background: var(--termica); margin-top: 6px; }
+.det-num { font-family: "Saira Semi Condensed", sans-serif; font-size: 1.45rem; font-weight: 700; }
+.det-cli { font-size: 1.12rem; font-weight: 600; margin: 2px 0 2px; }
+.linha-info { margin: 0 0 9px 0; font-size: 1rem; color: var(--tinta); }
+.dinheiro { color: var(--dinheiro); font-weight: 700; }
+
+/* Botão principal com brilho de "gelo" */
+button[kind="primary"], button[data-testid="stBaseButton-primary"] {
+  box-shadow: 0 0 0 1px rgba(31,168,255,.4), 0 6px 18px rgba(31,168,255,.25); font-weight: 600; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--brasa) !important; outline-offset: 2px; }
+
+/* Login */
+.ps-login { text-align: center; margin: 4vh auto 10px; }
+.ps-login img { width: 168px; height: 168px; filter: drop-shadow(0 0 24px rgba(31,168,255,.35)); }
+.ps-login p { color: var(--tinta-suave); margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 """
 
@@ -195,7 +253,16 @@ def formatar_id_pdf(os_id) -> str:
 
 def badge_status(status: str) -> str:
     cor = CORES_STATUS.get(status, COR_OUTROS)
-    return f'<span class="badge" style="background:{cor}">{status}</span>'
+    return (f'<span class="badge" style="background:{cor}26;border-color:{cor}99;'
+            f'color:{_clarear(cor)}">{status}</span>')
+
+
+def _clarear(hex_cor: str, f: float = 0.45) -> str:
+    """Versão mais clara da cor para texto legível sobre o fundo escuro."""
+    h = hex_cor.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (round(c + (255 - c) * f) for c in (r, g, b))
+    return f"#{r:02X}{g:02X}{b:02X}"
 
 
 def whatsapp_url(numero, mensagem: str):
@@ -717,40 +784,58 @@ def cb_fechar_ultimo():
 # CABEÇALHO
 # =========================
 @st.cache_resource(show_spinner=False)
-def logo_cabecalho_b64(caminho: str) -> str:
-    """Versão pequena da logo para o cabeçalho (a original é pesada para enviar a cada clique)."""
+def logo_cabecalho_b64(caminho: str, lado: int = 200) -> str:
+    """Logo reduzida em PNG (mantém a transparência do círculo) para o cabeçalho."""
     try:
         from io import BytesIO
         from PIL import Image
 
         with Image.open(caminho) as im:
-            if im.mode in ("RGBA", "LA", "P"):
-                fundo = Image.new("RGB", im.size, "white")
-                fundo.paste(im.convert("RGBA"), mask=im.convert("RGBA").split()[-1])
-                im = fundo
-            im = im.convert("RGB")
-            im.thumbnail((360, 120))
+            im = im.convert("RGBA")
+            im.thumbnail((lado, lado))
             buf = BytesIO()
-            im.save(buf, format="JPEG", quality=85, optimize=True)
+            im.save(buf, format="PNG", optimize=True)
         return base64.b64encode(buf.getvalue()).decode()
     except Exception:
         return ""
 
 
+def logo_img_tag(lado: int = 200) -> str:
+    logo = get_logo_path()
+    b64 = logo_cabecalho_b64(logo, lado) if logo else ""
+    return f'<img src="data:image/png;base64,{b64}" alt="Logo P&amp;S Refrigeração">' if b64 else ""
+
+
+@st.cache_resource(show_spinner=False)
+def icone_pagina():
+    """Logo como ícone da aba do navegador (cai no emoji se não houver logo)."""
+    try:
+        from PIL import Image
+
+        im = Image.open(get_logo_path()).convert("RGBA")
+        im.thumbnail((64, 64))
+        return im
+    except Exception:
+        return "❄️"
+
+
 def render_cabecalho():
     st.markdown(CSS, unsafe_allow_html=True)
-    logo = get_logo_path()
-    b64 = logo_cabecalho_b64(logo) if logo else ""
-    img = f'<img src="data:image/jpeg;base64,{b64}" alt="logo">' if b64 else ""
+    render_cabecalho_marca()
+
+
+def render_cabecalho_marca():
+    nome = EMPRESA.get("nome_fantasia") or APP_NOME
     st.markdown(
         f"""
-        <div class="app-header">
-            {img}
+        <div class="ps-hero">
+            {logo_img_tag(200)}
             <div>
-                <div class="titulo">❄️ {APP_NOME}</div>
-                <div class="sub">{APP_SUBTITULO}</div>
+                <div class="ps-nome">{nome}</div>
+                <div class="ps-slogan">Soluções em conforto</div>
             </div>
         </div>
+        <div class="ps-termica"></div>
         """,
         unsafe_allow_html=True,
     )
@@ -765,11 +850,11 @@ def render_novo():
 
     if editando:
         c1, c2 = st.columns([4, 1], vertical_alignment="center")
-        c1.info(f"✏️ Editando o orçamento **Nº {formatar_id_pdf(ss['id_edicao'])}** ({ss['id_edicao']})")
+        c1.info(f"Editando o orçamento **Nº {formatar_id_pdf(ss['id_edicao'])}** ({ss['id_edicao']})")
         c2.button("Cancelar edição", on_click=cb_cancelar_edicao, width="stretch")
 
     with st.form("form_orcamento", border=True):
-        st.markdown("##### 👤 Dados do cliente")
+        st.markdown("##### :material/person: Dados do cliente")
         col1, col2 = st.columns(2)
         with col1:
             st.text_input("Cliente", key="f_cliente", placeholder="Nome do cliente")
@@ -778,7 +863,7 @@ def render_novo():
             st.date_input("Data", key="f_data", format="DD/MM/YYYY")
             st.selectbox("Status", STATUS_OPCOES, key="f_status")
 
-        st.markdown("##### 🧾 Itens do orçamento")
+        st.markdown("##### :material/receipt_long: Itens do orçamento")
         st.caption("A última linha fica em branco para você adicionar um novo item.")
         df_init = garantir_linha_em_branco(pd.DataFrame(ss["itens_base"]))
         tabela = st.data_editor(
@@ -796,7 +881,7 @@ def render_novo():
             },
         )
 
-        with st.expander("📄 Detalhes para o PDF (opcional)", expanded=bool(ss.get("f_descritivo") or ss.get("f_titulo"))):
+        with st.expander("Detalhes para o PDF (opcional)", icon=":material/description:", expanded=bool(ss.get("f_descritivo") or ss.get("f_titulo"))):
             st.text_input("Título do orçamento", key="f_titulo",
                           placeholder="Ex.: Instalação de sistema de climatização")
             st.text_area("Descritivo dos serviços e equipamentos", key="f_descritivo", height=130,
@@ -804,8 +889,8 @@ def render_novo():
             st.text_area("Forma de pagamento", key="f_pagamento", height=80,
                          placeholder="Vazio = texto padrão (definida em comum acordo entre as partes).")
 
-        rotulo = "💾 Salvar alterações" if editando else "💾 Salvar orçamento"
-        enviado = st.form_submit_button(rotulo, type="primary", width="stretch")
+        rotulo = "Salvar alterações" if editando else "Salvar orçamento"
+        enviado = st.form_submit_button(rotulo, icon=":material/save:", type="primary", width="stretch")
 
     if enviado:
         processar_salvar(tabela, editando)
@@ -822,13 +907,13 @@ def render_novo():
             with st.container(border=True):
                 st.markdown(
                     f"✅ **Orçamento Nº {formatar_id_pdf(r['ID'])}** — {r['Cliente']} · "
-                    f"<span style='color:#1E9E62;font-weight:700'>{fmt_brl(r['Total'])}</span>",
+                    f"<span class='dinheiro'>{fmt_brl(r['Total'])}</span>",
                     unsafe_allow_html=True,
                 )
                 c_pdf, c_whats, c_fechar = st.columns(3)
                 acoes_envio(r, c_pdf, c_whats, prefixo="ult")
                 with c_fechar:
-                    st.button("➕ Novo orçamento", on_click=cb_fechar_ultimo, width="stretch", key="ult_fechar")
+                    st.button("Novo orçamento", icon=":material/add:", on_click=cb_fechar_ultimo, width="stretch", key="ult_fechar")
 
 
 def acoes_envio(r, col_pdf, col_whats, prefixo: str):
@@ -842,8 +927,9 @@ def acoes_envio(r, col_pdf, col_whats, prefixo: str):
     link = link_cliente(tok) if r["Status"] == "Pendente" else ""
     with col_pdf:
         st.download_button(
-            "📄 PDF",
+            "PDF",
             pdf_orcamento_bytes(r, link),
+            icon=":material/picture_as_pdf:",
             file_name=nome_arquivo_pdf(r["ID"], r["Cliente"]),
             mime="application/pdf",
             width="stretch",
@@ -852,10 +938,10 @@ def acoes_envio(r, col_pdf, col_whats, prefixo: str):
     with col_whats:
         url = whatsapp_url(r["WhatsApp"], mensagem_whatsapp(r["Cliente"], r["ID"], r["Total"], link))
         if url:
-            st.link_button("🟢 WhatsApp", url, width="stretch",
+            st.link_button("WhatsApp", url, icon=":material/chat:", width="stretch",
                            help="Envia o orçamento com o link para o cliente aprovar ou recusar.")
         else:
-            st.button("🟢 WhatsApp", disabled=True, width="stretch", key=f"{prefixo}_wpp_{r['ID']}",
+            st.button("WhatsApp", icon=":material/chat:", disabled=True, width="stretch", key=f"{prefixo}_wpp_{r['ID']}",
                       help="Este orçamento não tem número de WhatsApp.")
     return link
 
@@ -911,7 +997,7 @@ def dialog_excluir(os_id: str, cliente: str, total: float):
     c1, c2 = st.columns(2)
     if c1.button("Cancelar", width="stretch", key="dlg_cancelar"):
         st.rerun()
-    if c2.button("🗑️ Excluir", type="primary", width="stretch", key="dlg_excluir"):
+    if c2.button("Excluir", icon=":material/delete:", type="primary", width="stretch", key="dlg_excluir"):
         try:
             excluir_orcamento(os_id)
         except Exception as e:
@@ -943,7 +1029,7 @@ def render_historico():
         return
 
     c_busca, c_status = st.columns([2, 1])
-    busca = c_busca.text_input("🔎 Buscar", key="h_busca", placeholder="Cliente, nº ou item")
+    busca = c_busca.text_input("Buscar", key="h_busca", placeholder="Cliente, nº ou item")
     status_sel = c_status.multiselect("Status", STATUS_OPCOES, key="h_status", placeholder="Todos")
 
     dff = df.copy()
@@ -1009,12 +1095,9 @@ def render_detalhe(r):
         with c_info:
             st.markdown(
                 f"""
-                <div class="rotulo">Orçamento</div>
-                <div class="linha-info"><b>Nº {formatar_id_pdf(r['ID'])}</b> &nbsp;{badge_status(r['Status'])}</div>
-                <div class="rotulo">Cliente</div>
-                <div class="linha-info">{r['Cliente']}</div>
-                <div class="rotulo">WhatsApp · Data</div>
-                <div class="linha-info">{r['WhatsApp'] or '—'} · {r['Data'] or '—'}</div>
+                <div class="det-num">Nº {formatar_id_pdf(r['ID'])} &nbsp;{badge_status(r['Status'])}</div>
+                <div class="det-cli">{r['Cliente']}</div>
+                <div class="rotulo">{('WhatsApp ' + r['WhatsApp']) if r['WhatsApp'] else 'Sem WhatsApp'}, emitido em {r['Data'] or '—'}</div>
                 """,
                 unsafe_allow_html=True,
             )
@@ -1026,7 +1109,8 @@ def render_detalhe(r):
                 )
         with c_valor:
             st.markdown(
-                f'<div class="rotulo">Valor total</div><div class="valor-grande">{fmt_brl(r["Total"])}</div>',
+                f'<div class="rotulo">Valor total</div><div class="valor-grande">{fmt_brl(r["Total"])}</div>'
+                '<div class="valor-sub"></div>',
                 unsafe_allow_html=True,
             )
 
@@ -1047,9 +1131,9 @@ def render_detalhe(r):
         c_pdf, c_whats, c_edit, c_status, c_del = st.columns(5)
         link = acoes_envio(r, c_pdf, c_whats, prefixo="h")
         with c_edit:
-            st.button("✏️ Editar", on_click=cb_editar, args=(os_id,), width="stretch", key=f"h_edit_{os_id}")
+            st.button("Editar", icon=":material/edit:", on_click=cb_editar, args=(os_id,), width="stretch", key=f"h_edit_{os_id}")
         with c_status:
-            with st.popover("🔄 Status", width="stretch"):
+            with st.popover("Status", icon=":material/sync_alt:", width="stretch"):
                 idx = STATUS_OPCOES.index(r["Status"]) if r["Status"] in STATUS_OPCOES else 0
                 novo = st.radio("Novo status", STATUS_OPCOES, index=idx, key=f"h_novo_status_{os_id}")
                 if st.button("Salvar status", type="primary", width="stretch", key=f"h_salvar_status_{os_id}"):
@@ -1061,7 +1145,7 @@ def render_detalhe(r):
                         st.session_state["_flash"] = f"Status do Nº {formatar_id_pdf(os_id)} alterado para {novo}."
                         st.rerun()
         with c_del:
-            if st.button("🗑️ Excluir", width="stretch", key=f"h_del_{os_id}"):
+            if st.button("Excluir", icon=":material/delete:", width="stretch", key=f"h_del_{os_id}"):
                 dialog_excluir(os_id, r["Cliente"], float(r["Total"]))
 
         if link:
@@ -1158,8 +1242,8 @@ def _eixo_reais():
 
 
 def _escala_status(status_presentes):
-    dominio = [s for s in STATUS_OPCOES if s in status_presentes] + sorted(
-        s for s in status_presentes if s not in STATUS_OPCOES
+    dominio = [s for s in ORDEM_GRAFICO if s in status_presentes] + sorted(
+        s for s in status_presentes if s not in ORDEM_GRAFICO
     )
     return alt.Scale(domain=dominio, range=[CORES_STATUS.get(s, COR_OUTROS) for s in dominio])
 
@@ -1171,11 +1255,11 @@ def grafico_mensal(df: pd.DataFrame):
     m["Mês"] = m["MesData"].map(lambda d: f"{MESES[d.month - 1]}/{str(d.year)[-2:]}")
     m["Valor"] = m["Total"].map(fmt_brl)
     ordem_meses = [f"{MESES[d.month - 1]}/{str(d.year)[-2:]}" for d in sorted(m["MesData"].unique())]
-    m["ordem_status"] = m["Status"].map(lambda s: STATUS_OPCOES.index(s) if s in STATUS_OPCOES else 99)
+    m["ordem_status"] = m["Status"].map(lambda s: ORDEM_GRAFICO.index(s) if s in ORDEM_GRAFICO else 99)
 
     return (
         alt.Chart(m)
-        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, stroke=PAINEL, strokeWidth=2)
         .encode(
             x=alt.X("Mês:N", sort=ordem_meses, title=None, axis=alt.Axis(labelAngle=0)),
             y=alt.Y("Total:Q", axis=_eixo_reais(), stack="zero"),
@@ -1198,11 +1282,13 @@ def grafico_status(df: pd.DataFrame):
     tot = s["Total"].sum()
     s["Valor"] = s["Total"].map(fmt_brl)
     s["Part"] = s["Total"].map(lambda v: fmt_pct(v / tot) if tot else "0%")
+    s["ordem_status"] = s["Status"].map(lambda x: ORDEM_GRAFICO.index(x) if x in ORDEM_GRAFICO else 99)
     return (
         alt.Chart(s)
-        .mark_arc(innerRadius=62, outerRadius=110, cornerRadius=3, padAngle=0.015)
+        .mark_arc(innerRadius=62, outerRadius=110, cornerRadius=3, stroke=PAINEL, strokeWidth=2)
         .encode(
             theta=alt.Theta("Total:Q", stack=True),
+            order=alt.Order("ordem_status:Q"),
             color=alt.Color("Status:N", scale=_escala_status(set(s["Status"])),
                             legend=alt.Legend(orient="bottom", title=None, columns=2)),
             tooltip=[
@@ -1230,7 +1316,7 @@ def grafico_clientes(df: pd.DataFrame, top: int = 10):
                  alt.Tooltip("Qtd:Q", title="Serviços")],
     )
     barras = base.mark_bar(color=CORES_STATUS["Concluído"], cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-    rotulos = base.mark_text(align="left", dx=5, fontSize=12, color="#41505F").encode(text="Valor:N")
+    rotulos = base.mark_text(align="left", dx=6, fontSize=12, color=TINTA_SUAVE).encode(text="Valor:N")
     return (barras + rotulos).properties(height=max(140, 34 * len(c)))
 
 
@@ -1282,15 +1368,15 @@ def render_financeiro():
     r = resumo(atual)
     ra = resumo(anterior) if anterior is not None else None
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("💰 Faturado", fmt_brl(r["faturado"]), delta_pct(r["faturado"], ra["faturado"] if ra else None),
+    k1.metric("Faturado", fmt_brl(r["faturado"]), delta_pct(r["faturado"], ra["faturado"] if ra else None),
               border=True, help="Soma dos orçamentos com status Concluído no período.")
-    k2.metric("⏳ Em aberto", fmt_brl(r["aberto"]), f"{r['qtd_abertos']} orçamento(s)", delta_color="off",
+    k2.metric("Em aberto", fmt_brl(r["aberto"]), f"{r['qtd_abertos']} orçamento(s)", delta_color="off",
               border=True, help="Pendente + Aprovado + Em Andamento: valor que ainda pode entrar.")
-    k3.metric("📄 Orçamentos", r["qtd"], (r["qtd"] - ra["qtd"]) if ra else None,
+    k3.metric("Orçamentos", r["qtd"], (r["qtd"] - ra["qtd"]) if ra else None,
               border=True, help="Quantidade de orçamentos emitidos no período (todos os status).")
-    k4.metric("🎯 Ticket médio", fmt_brl(r["ticket"]), delta_pct(r["ticket"], ra["ticket"] if ra else None),
+    k4.metric("Ticket médio", fmt_brl(r["ticket"]), delta_pct(r["ticket"], ra["ticket"] if ra else None),
               border=True, help="Valor médio dos orçamentos concluídos.")
-    k5.metric("✅ Aprovação", fmt_pct(r["aprovacao"]),
+    k5.metric("Aprovação", fmt_pct(r["aprovacao"]),
               (f"{'+' if r['aprovacao'] - ra['aprovacao'] >= 0 else ''}{(r['aprovacao'] - ra['aprovacao']) * 100:.1f} p.p.".replace(".", ",")
                if ra and ra["qtd"] else None),
               border=True, help="(Aprovado + Em Andamento + Concluído) ÷ orçamentos não cancelados.")
@@ -1303,17 +1389,17 @@ def render_financeiro():
     g1, g2 = st.columns([2, 1])
     with g1:
         with st.container(border=True):
-            st.markdown("##### 📈 Evolução mensal por status")
+            st.markdown("##### :material/bar_chart: Evolução mensal por status")
             st.altair_chart(grafico_mensal(atual), width="stretch")
     with g2:
         with st.container(border=True):
-            st.markdown("##### 🧩 Distribuição por status")
+            st.markdown("##### :material/donut_large: Distribuição por status")
             st.altair_chart(grafico_status(atual), width="stretch")
 
     g3, g4 = st.columns(2)
     with g3:
         with st.container(border=True):
-            st.markdown("##### 🏆 Top clientes (faturado)")
+            st.markdown("##### :material/leaderboard: Top clientes (faturado)")
             ch = grafico_clientes(atual)
             if ch is None:
                 st.caption("Nenhum orçamento concluído no período.")
@@ -1321,7 +1407,7 @@ def render_financeiro():
                 st.altair_chart(ch, width="stretch")
     with g4:
         with st.container(border=True):
-            st.markdown("##### 📌 Pendências para acompanhar")
+            st.markdown("##### :material/pending_actions: Pendências para acompanhar")
             abertos = atual[atual["Status"].isin(STATUS_ABERTOS)].copy()
             if abertos.empty:
                 st.caption("Nenhum orçamento em aberto. 🎉")
@@ -1341,7 +1427,7 @@ def render_financeiro():
                 )
 
     # ---- Detalhe + exportação
-    with st.expander(f"📋 Orçamentos do período ({len(atual)})"):
+    with st.expander(f"Orçamentos do período ({len(atual)})", icon=":material/table_rows:"):
         lista = atual.sort_values(by="ID", key=lambda s: s.map(id_key), ascending=False)
         lista = lista[["ID", "Data", "Cliente", "WhatsApp", "Status", "Total", "Itens"]].copy()
         lista.insert(0, "Nº", lista["ID"].map(formatar_id_pdf))
@@ -1353,8 +1439,9 @@ def render_financeiro():
         )
         csv = lista.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig")
         st.download_button(
-            "⬇️ Exportar para Excel (CSV)",
+            "Exportar para Excel (CSV)",
             csv,
+            icon=":material/download:",
             file_name=f"orcamentos_{ini:%Y%m%d}_{fim:%Y%m%d}.csv",
             mime="text/csv",
             key="fin_csv",
@@ -1370,13 +1457,10 @@ def render_financeiro():
 CSS_CLIENTE = """
 <style>
 [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stSidebar"] { display: none !important; }
-.block-container { max-width: 760px; padding-top: 1.2rem; }
-.cli-topo { display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:14px;
-            background:#1F2328; margin-bottom:14px; }
-.cli-topo img { height:54px; border-radius:6px; }
-.cli-topo .n { color:#fff; font-weight:700; font-size:1.1rem; }
-.cli-topo .s { color:#9FD0F0; font-size:.85rem; }
-.cli-total { font-size:2.1rem; font-weight:800; color:#1E9E62; line-height:1.1; }
+.block-container { max-width: 760px; padding-top: 1rem; }
+.cli-total { font-family: "Saira Semi Condensed", sans-serif; font-size: 2.3rem; font-weight: 700;
+  color: var(--dinheiro); line-height: 1.1; }
+.cli-contato { color: var(--tinta-suave); font-size: .9rem; margin: -6px 0 12px; }
 </style>
 """
 
@@ -1396,7 +1480,7 @@ def _contato_empresa_url(texto: str):
 def dialog_aprovar(token: str, numero: str):
     st.write(f"Você confirma a **aprovação** do orçamento **Nº {numero}**?")
     obs = st.text_area("Observação (opcional)", placeholder="Ex.: melhor dia para a instalação", key="dlg_obs_ap")
-    if st.button("✅ Confirmar aprovação", type="primary", width="stretch", key="dlg_ok_ap"):
+    if st.button("Confirmar aprovação", icon=":material/check_circle:", type="primary", width="stretch", key="dlg_ok_ap"):
         _responder(token, True, obs)
 
 
@@ -1419,16 +1503,12 @@ def _responder(token: str, aprovado: bool, obs: str):
 
 
 def render_pagina_cliente(token: str):
+    st.markdown(CSS, unsafe_allow_html=True)
     st.markdown(CSS_CLIENTE, unsafe_allow_html=True)
-    logo = get_logo_path()
-    b64 = logo_cabecalho_b64(logo) if logo else ""
-    img = f'<img src="data:image/jpeg;base64,{b64}" alt="logo">' if b64 else ""
-    contato = " · ".join(x for x in [EMPRESA.get("telefone", ""), EMPRESA.get("email", "")] if x)
-    st.markdown(
-        f'<div class="cli-topo">{img}<div><div class="n">{EMPRESA.get("nome_fantasia") or APP_NOME}</div>'
-        f'<div class="s">{contato or APP_SUBTITULO}</div></div></div>',
-        unsafe_allow_html=True,
-    )
+    render_cabecalho_marca()
+    contato = "   |   ".join(x for x in [EMPRESA.get("telefone", ""), EMPRESA.get("email", "")] if x)
+    if contato:
+        st.markdown(f'<div class="cli-contato">{contato}</div>', unsafe_allow_html=True)
 
     try:
         r = buscar_por_token(str(token).strip())
@@ -1457,7 +1537,7 @@ def render_pagina_cliente(token: str):
             val = _validade(r)
             st.caption(f"Emitido em {r['Data']}" + (f" · válido até {fmt_data(val)}" if val else ""))
         with c2:
-            st.markdown(f'<div class="rotulo">Valor total</div><div class="cli-total">{fmt_brl(r["Total"])}</div>',
+            st.markdown(f'<div class="rotulo">Valor total</div><div class="cli-total">{fmt_brl(r["Total"])}</div><div class="valor-sub"></div>',
                         unsafe_allow_html=True)
 
         itens = itens_json_para_df(r["ItensJSON"], r["Itens"], r["Total"])
@@ -1479,8 +1559,9 @@ def render_pagina_cliente(token: str):
         st.write(r["Pagamento"] or EMPRESA.get("pagamento_padrao", ""))
 
         st.download_button(
-            "📄 Baixar orçamento em PDF",
+            "Baixar orçamento em PDF",
             pdf_orcamento_bytes(r, link_cliente(token)),
+            icon=":material/picture_as_pdf:",
             file_name=nome_arquivo_pdf(r["ID"], r["Cliente"]),
             mime="application/pdf",
             width="stretch",
@@ -1495,9 +1576,9 @@ def render_pagina_cliente(token: str):
                        "Você ainda pode responder, e confirmaremos os valores com você.")
         st.markdown("#### O que você decide?")
         b1, b2 = st.columns(2)
-        if b1.button("✅ Aprovar orçamento", type="primary", width="stretch", key="cli_aprovar"):
+        if b1.button("Aprovar orçamento", icon=":material/check_circle:", type="primary", width="stretch", key="cli_aprovar"):
             dialog_aprovar(token, numero)
-        if b2.button("❌ Recusar", width="stretch", key="cli_recusar"):
+        if b2.button("Recusar", icon=":material/cancel:", width="stretch", key="cli_recusar"):
             dialog_recusar(token, numero)
     elif status in ("Aprovado", "Recusado"):
         quando = fmt_datahora(r["RespostaEm"])
@@ -1512,7 +1593,7 @@ def render_pagina_cliente(token: str):
             f"o orçamento Nº {numero}."
         )
         if url:
-            st.link_button("💬 Avisar pelo WhatsApp", url, width="stretch")
+            st.link_button("Avisar pelo WhatsApp", url, icon=":material/chat:", width="stretch")
     else:
         st.info(f"Situação atual do orçamento: **{status}**.")
 
@@ -1531,27 +1612,27 @@ def cb_sair():
     st.session_state["autenticado"] = False
 
 
-def exigir_login() -> bool:
-    senha = senha_configurada()
-    if not senha:
-        st.warning("⚠️ A área de gestão está **sem senha**. Configure `APP_SENHA` em Settings → Secrets "
-                   "no Streamlit Cloud para proteger os dados dos clientes.")
-        return True
-    if st.session_state.get("autenticado"):
-        return True
-    _, meio, _ = st.columns([1, 2, 1])
+def precisa_login() -> bool:
+    return bool(senha_configurada()) and not st.session_state.get("autenticado")
+
+
+def render_login():
+    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="ps-login">{logo_img_tag(340)}<p>Gestão de orçamentos e serviços</p></div>',
+        unsafe_allow_html=True,
+    )
+    _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
         with st.form("login", border=True):
-            st.markdown("##### 🔒 Acesso restrito")
-            digitada = st.text_input("Senha", type="password", key="login_senha")
+            digitada = st.text_input("Senha de acesso", type="password", key="login_senha")
             entrar = st.form_submit_button("Entrar", type="primary", width="stretch")
         if entrar:
-            if hmac.compare_digest(str(digitada).encode(), senha.encode()):
+            if hmac.compare_digest(str(digitada).encode(), senha_configurada().encode()):
                 st.session_state["autenticado"] = True
                 st.rerun()
             else:
-                st.error("Senha incorreta.")
-    return False
+                st.error("Senha incorreta. Confira e tente de novo.")
 
 
 def render_respostas_recentes():
@@ -1577,7 +1658,7 @@ def render_respostas_recentes():
         linhas.append(f"- **{r['Cliente']}** {acao} o Nº {formatar_id_pdf(r['ID'])} "
                       f"({fmt_brl(r['Total'])}) — {fmt_datahora(v)}"
                       + (f" · _{r['RespostaObs']}_" if r["RespostaObs"] else ""))
-    with st.expander(f"🔔 Respostas de clientes nos últimos 7 dias ({len(recentes)})", expanded=True):
+    with st.expander(f"Respostas de clientes nos últimos 7 dias ({len(recentes)})", icon=":material/notifications_active:", expanded=True):
         st.markdown("\n".join(linhas))
 
 
@@ -1596,18 +1677,22 @@ def criar_abas():
 def main():
     token = st.query_params.get("orc")
     if token:
-        st.set_page_config(page_title="Orçamento - P&S Refrigeração", page_icon="❄️", layout="centered")
+        st.set_page_config(page_title="Orçamento | P&S Refrigeração", page_icon=icone_pagina(), layout="centered")
         render_pagina_cliente(token)
         return
 
-    st.set_page_config(page_title="PS REFRIGERAÇÃO - Gestão", page_icon="❄️", layout="wide")
+    st.set_page_config(page_title="P&S Refrigeração | Gestão", page_icon=icone_pagina(), layout="wide")
     init_state()
-    render_cabecalho()
-    if not exigir_login():
+    if precisa_login():
+        render_login()
         return
-    if senha_configurada():
+    render_cabecalho()
+    if not senha_configurada():
+        st.warning("A área de gestão está sem senha. Configure `APP_SENHA` em Settings → Secrets "
+                   "no Streamlit Cloud para proteger os dados dos clientes.", icon="⚠️")
+    else:
         _, c_sair = st.columns([6, 1])
-        c_sair.button("🔒 Sair", on_click=cb_sair, width="stretch", key="btn_sair")
+        c_sair.button("Sair", icon=":material/logout:", on_click=cb_sair, width="stretch", key="btn_sair")
     render_respostas_recentes()
 
     tab_novo, tab_hist, tab_fin = criar_abas()

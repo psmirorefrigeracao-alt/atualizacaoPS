@@ -21,20 +21,24 @@ from reportlab.platypus import (
     Flowable, KeepTogether, ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
-# ---------- Paleta (cores da logo: grafite + azul) ----------
-GRAFITE = colors.HexColor("#1F2328")
-AZUL = colors.HexColor("#2479B4")
-AZUL_CLARO = colors.HexColor("#519FCF")
-AZUL_FUNDO = colors.HexColor("#EAF3FA")
-CINZA_TXT = colors.HexColor("#3A4048")
-CINZA_SUAVE = colors.HexColor("#6B7380")
-CINZA_LINHA = colors.HexColor("#D5DBE2")
-ZEBRA = colors.HexColor("#F5F7FA")
+# ---------- Paleta (identidade da logo P&S: noite, gelo e brasa) ----------
+NOITE = colors.HexColor("#0A1222")
+NOITE_2 = colors.HexColor("#122038")
+GRAFITE = NOITE
+AZUL = colors.HexColor("#0E7ACB")        # azul "gelo" legível sobre papel branco
+AZUL_CLARO = colors.HexColor("#1FA8FF")  # azul da logo (faixas e destaques)
+BRASA = colors.HexColor("#F28A12")
+AZUL_FUNDO = colors.HexColor("#EAF5FD")
+CINZA_TXT = colors.HexColor("#2E3A4B")
+CINZA_SUAVE = colors.HexColor("#66748A")
+CINZA_LINHA = colors.HexColor("#D6DEE8")
+ZEBRA = colors.HexColor("#F4F7FB")
 VERDE = colors.HexColor("#1E9E62")
 VERMELHO = colors.HexColor("#C93C3C")
+GELO_TXT = colors.HexColor("#8FD3FF")
 
 MARGEM_X = 18 * mm
-TOPO = 40 * mm
+TOPO = 47 * mm
 BASE = 20 * mm
 LARGURA_UTIL = A4[0] - 2 * MARGEM_X
 
@@ -74,14 +78,15 @@ _cache_img = {}
 
 
 def _logo_reader(caminho):
+    """Logo em PNG com transparência (o círculo da logo fica sem cantos pretos)."""
     if not caminho:
         return None, (1, 1)
     if ("logo", caminho) not in _cache_img:
         try:
-            im = Image.open(caminho).convert("RGB")
-            im.thumbnail((900, 900))
+            im = Image.open(caminho).convert("RGBA")
+            im.thumbnail((700, 700))
             buf = io.BytesIO()
-            im.save(buf, format="JPEG", quality=90)
+            im.save(buf, format="PNG")
             buf.seek(0)
             _cache_img[("logo", caminho)] = (ImageReader(buf), im.size)
         except Exception:
@@ -89,37 +94,36 @@ def _logo_reader(caminho):
     return _cache_img[("logo", caminho)]
 
 
-def _marca_dagua_reader(caminho):
-    """Pega o símbolo azul da logo e transforma numa marca d'água bem clara (PNG transparente)."""
-    if not caminho:
-        return None, (1, 1)
-    if ("wm", caminho) not in _cache_img:
-        try:
-            im = Image.open(caminho).convert("RGB")
-            w, h = im.size
-            x0 = int(w * 0.55)
-            im = im.crop((x0, 0, w, h))
-            im.thumbnail((700, 700))
-            cw, ch = im.size
-            # região do texto "climatização" (canto inferior esquerdo do recorte) fica de fora
-            lim_x = int((0.77 - 0.55) / 0.45 * cw)
-            lim_y = int(0.70 * ch)
-            rgba = Image.new("RGBA", im.size, (0, 0, 0, 0))
-            px_in, px_out = im.load(), rgba.load()
-            for y in range(ch):
-                for x in range(cw):
-                    if y > lim_y and x < lim_x:
-                        continue
-                    r, g, b = px_in[x, y]
-                    if b > 140 and b - r > 60:          # pixels azuis do símbolo
-                        px_out[x, y] = (81, 159, 207, 26)
-            buf = io.BytesIO()
-            rgba.save(buf, format="PNG")
-            buf.seek(0)
-            _cache_img[("wm", caminho)] = (ImageReader(buf), rgba.size)
-        except Exception:
-            _cache_img[("wm", caminho)] = (None, (1, 1))
-    return _cache_img[("wm", caminho)]
+def _floco(c, cx, cy, raio, cor, alpha, largura):
+    """Floco de neve vetorial (marca d'água): 6 braços com ramificações."""
+    import math
+    c.saveState()
+    c.setStrokeColor(cor)
+    if alpha < 1:
+        c.setStrokeAlpha(alpha)
+    c.setLineWidth(largura)
+    c.setLineCap(1)
+    for i in range(6):
+        ang = math.radians(90 + i * 60)
+        dx, dy = math.cos(ang), math.sin(ang)
+        c.line(cx, cy, cx + dx * raio, cy + dy * raio)
+        for frac, tam in ((0.42, 0.30), (0.70, 0.24)):
+            px, py = cx + dx * raio * frac, cy + dy * raio * frac
+            for lado in (-1, 1):
+                a2 = ang + lado * math.radians(45)
+                c.line(px, py, px + math.cos(a2) * raio * tam, py + math.sin(a2) * raio * tam)
+    c.restoreState()
+
+
+def _linha_termica(c, x0, x1, y, espessura):
+    """Faixa azul → laranja (frio → quente), assinatura visual da marca."""
+    c.saveState()
+    p = c.beginPath()
+    p.rect(x0, y, x1 - x0, espessura)
+    c.clipPath(p, stroke=0, fill=0)
+    c.linearGradient(x0, y, x1, y, (AZUL_CLARO, colors.HexColor("#39C6FF"), colors.HexColor("#FFB23F"), BRASA),
+                     positions=(0, 0.38, 0.72, 1), extend=False)
+    c.restoreState()
 
 
 class _Secao(Flowable):
@@ -140,9 +144,11 @@ class _Secao(Flowable):
         c.setFillColor(GRAFITE)
         c.drawString(0, 2.6 * mm, self.texto)
         larg = c.stringWidth(self.texto, "Helvetica-Bold", 12.5)
-        c.setStrokeColor(AZUL)
+        c.setStrokeColor(AZUL_CLARO)
         c.setLineWidth(1.4)
         c.line(0, 1.2 * mm, larg, 1.2 * mm)
+        c.setFillColor(BRASA)
+        c.circle(larg + 2.2 * mm, 1.2 * mm, 0.9 * mm, stroke=0, fill=1)
 
 
 def _qr(link, tamanho=30 * mm):
@@ -184,8 +190,8 @@ def gerar_pdf_orcamento(orc: dict, itens: list, empresa: dict, logo_path: str = 
     st = {
         "base": base,
         "just": ParagraphStyle("just", parent=base, alignment=4),
-        "atividade": ParagraphStyle("atv", parent=base, fontName="Helvetica-Bold", fontSize=11.5, leading=15,
-                                    textColor=GRAFITE),
+        "atividade": ParagraphStyle("atv", parent=base, fontName="Helvetica-Bold", fontSize=10.5, leading=14,
+                                    textColor=AZUL),
         "contato": ParagraphStyle("ct", parent=base, fontSize=9.6, leading=13.4),
         "titulo": ParagraphStyle("tit", parent=base, fontName="Helvetica-Bold", fontSize=14, leading=18,
                                  textColor=GRAFITE),
@@ -208,7 +214,7 @@ def gerar_pdf_orcamento(orc: dict, itens: list, empresa: dict, logo_path: str = 
 
     # ----- Identificação da empresa (página 1)
     if empresa.get("atividade"):
-        story.append(Paragraph(f"<u>{_t(empresa['atividade']).upper()}</u>", st["atividade"]))
+        story.append(Paragraph(_t(empresa['atividade']), st["atividade"]))
         story.append(Spacer(0, 2.5 * mm))
     linhas = []
     if empresa.get("endereco"):
@@ -230,7 +236,6 @@ def gerar_pdf_orcamento(orc: dict, itens: list, empresa: dict, logo_path: str = 
     # ----- Título + número
     titulo = (orc.get("titulo") or "Orçamento de serviços").strip()
     story.append(Paragraph(_t(titulo).upper(), st["titulo"]))
-    story.append(Paragraph(f"<font color='#6B7380'>ORÇAMENTO Nº</font> <b>{_t(numero)}</b>", st["base"]))
     story.append(Spacer(0, 4 * mm))
 
     # ----- Caixas: empresa executora | cliente
@@ -325,7 +330,7 @@ def gerar_pdf_orcamento(orc: dict, itens: list, empresa: dict, logo_path: str = 
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("LINEBELOW", (0, 1), (-1, -2), 0.4, CINZA_LINHA),
         ("BACKGROUND", (0, -1), (-1, -1), AZUL_FUNDO),
-        ("LINEABOVE", (0, -1), (-1, -1), 1.2, AZUL),
+        ("LINEABOVE", (0, -1), (-1, -1), 1.4, BRASA),
         ("SPAN", (0, -1), (2, -1)),
     ]
     for i in range(1, len(linhas_tab) - 1):
@@ -448,40 +453,42 @@ def gerar_pdf_orcamento(orc: dict, itens: list, empresa: dict, logo_path: str = 
 
     # ----- Página (cabeçalho, marca d'água, rodapé)
     logo, (lw, lh) = _logo_reader(logo_path)
-    wm, (ww, wh) = _marca_dagua_reader(logo_path)
-    rodape_txt = " · ".join(x for x in [nome_emp, f"CNPJ {empresa.get('cnpj')}" if empresa.get("cnpj") else "",
-                                         empresa.get("telefone") or ""] if x)
+    rodape_txt = "   |   ".join(x for x in [nome_emp, f"CNPJ {empresa.get('cnpj')}" if empresa.get("cnpj") else "",
+                                           empresa.get("telefone") or ""] if x)
 
     def desenhar_fundo(c, doc):
         c.saveState()
         larg_pg, alt_pg = A4
-        if wm:
-            alvo = 125 * mm
-            esc = alvo / max(ww, wh)
-            c.drawImage(wm, (larg_pg - ww * esc) / 2, (alt_pg - wh * esc) / 2 - 10 * mm,
-                        ww * esc, wh * esc, mask="auto")
-        # cabeçalho
-        y_topo = alt_pg - 12 * mm
-        h_logo = 21 * mm
+        # marca d'água
+        _floco(c, larg_pg / 2, alt_pg / 2 - 12 * mm, 62 * mm, colors.HexColor("#EEF6FD"), 1, 9)
+        # faixa escura do cabeçalho
+        alt_faixa = 33 * mm
+        y_faixa = alt_pg - alt_faixa
+        c.setFillColor(NOITE)
+        c.rect(0, y_faixa, larg_pg, alt_faixa, stroke=0, fill=1)
+        _linha_termica(c, 0, larg_pg, y_faixa - 1.4 * mm, 1.4 * mm)
+        # logo
+        lado = 28 * mm
+        x_txt = MARGEM_X
         if logo:
-            w_logo = h_logo * lw / lh
-            c.drawImage(logo, MARGEM_X, y_topo - h_logo, w_logo, h_logo)
-        else:
-            c.setFont("Helvetica-Bold", 16)
-            c.setFillColor(GRAFITE)
-            c.drawString(MARGEM_X, y_topo - 12 * mm, _t(nome_emp))
-        c.setFillColor(CINZA_SUAVE)
+            c.drawImage(logo, MARGEM_X, y_faixa + (alt_faixa - lado) / 2, lado, lado * lh / lw, mask="auto")
+            x_txt = MARGEM_X + lado + 5 * mm
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 15)
+        c.drawString(x_txt, y_faixa + 18 * mm, nome_emp.encode("cp1252", "ignore").decode("cp1252"))
+        c.setFillColor(GELO_TXT)
+        c.setFont("Helvetica", 8.6)
+        c.drawString(x_txt, y_faixa + 12.6 * mm, "S O L U Ç Õ E S   E M   C O N F O R T O".encode("cp1252").decode("cp1252"))
+        # número do orçamento
+        c.setFillColor(colors.HexColor("#AFC3DA"))
         c.setFont("Helvetica", 8.5)
-        c.drawRightString(larg_pg - MARGEM_X, y_topo - 5 * mm, "ORÇAMENTO")
-        c.setFillColor(AZUL)
-        c.setFont("Helvetica-Bold", 17)
-        c.drawRightString(larg_pg - MARGEM_X, y_topo - 12 * mm, f"Nº {numero}")
-        c.setFillColor(CINZA_TXT)
+        c.drawRightString(larg_pg - MARGEM_X, y_faixa + 22 * mm, "Orçamento".encode("cp1252").decode("cp1252"))
+        c.setFillColor(BRASA)
+        c.setFont("Helvetica-Bold", 19)
+        c.drawRightString(larg_pg - MARGEM_X, y_faixa + 14.5 * mm, f"Nº {numero}")
+        c.setFillColor(colors.HexColor("#DCE6F2"))
         c.setFont("Helvetica", 9)
-        c.drawRightString(larg_pg - MARGEM_X, y_topo - 17.5 * mm, f"Emissão: {data_txt}")
-        c.setStrokeColor(AZUL_CLARO)
-        c.setLineWidth(1.2)
-        c.line(MARGEM_X, y_topo - h_logo - 3 * mm, larg_pg - MARGEM_X, y_topo - h_logo - 3 * mm)
+        c.drawRightString(larg_pg - MARGEM_X, y_faixa + 9 * mm, f"Emissão: {data_txt}".encode("cp1252", "ignore").decode("cp1252"))
         # rodapé
         c.setStrokeColor(CINZA_LINHA)
         c.setLineWidth(0.5)

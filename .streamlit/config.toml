@@ -1,12 +1,25 @@
 [theme]
-base = "light"
-primaryColor = "#1167B1"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F2F5F9"
-textColor = "#1F2933"
-borderColor = "#DDE3EA"
+base = "dark"
+primaryColor = "#1FA8FF"
+backgroundColor = "#060B16"
+secondaryBackgroundColor = "#0D1626"
+textColor = "#E6EEF8"
+borderColor = "#1C2A40"
+dataframeBorderColor = "#1C2A40"
+dataframeHeaderBackgroundColor = "#0F1B2E"
+linkColor = "#5CC2FF"
 showWidgetBorder = true
-baseRadius = "0.6rem"
+baseRadius = "10px"
+buttonRadius = "10px"
+font = "Source Sans 3:https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"
+headingFont = "Saira Semi Condensed:https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&display=swap"
+headingFontWeights = [700, 700, 600, 600, 600, 600]
+metricValueFontWeight = 700
+orangeColor = "#FF8C1A"
+blueColor = "#1FA8FF"
+greenColor = "#2FBF7A"
+redColor = "#F0566B"
+chartCategoricalColors = ["#2A9F63", "#4B74F0", "#0EA5A5", "#CF7313", "#A07BDB", "#E5466A"]
 
 [client]
 toolbarMode = "minimal"
