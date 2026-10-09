@@ -11,7 +11,7 @@ linkColor = "#5CC2FF"
 showWidgetBorder = true
 baseRadius = "10px"
 buttonRadius = "10px"
-font = "Source Sans 3:https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"
+font = "sans-serif"
 headingFont = "Saira Semi Condensed:https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&display=swap"
 headingFontWeights = [700, 700, 600, 600, 600, 600]
 metricValueFontWeight = 700

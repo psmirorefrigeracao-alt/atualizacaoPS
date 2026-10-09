@@ -106,7 +106,7 @@ CSS = """
     radial-gradient(700px 360px at 100% 0%, rgba(255,140,26,.07), transparent 60%),
     var(--noite);
 }
-.block-container { padding-top: 1.2rem; max-width: 1240px; }
+.block-container { padding-top: 3.2rem; max-width: 1240px; }
 h1, h2, h3, h4, h5 { letter-spacing: .01em; }
 
 /* Cabeçalho da marca */
@@ -127,8 +127,9 @@ h1, h2, h3, h4, h5 { letter-spacing: .01em; }
 
 /* Abas: a aba ativa ganha a faixa térmica */
 .stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid var(--borda); }
-.stTabs button[data-baseweb="tab"] { font-family: "Saira Semi Condensed", sans-serif; font-size: 1.02rem;
-  font-weight: 600; padding: 8px 14px; color: var(--tinta-suave); }
+.stTabs button[data-baseweb="tab"] { padding: 8px 14px; color: var(--tinta-suave); }
+.stTabs button[data-baseweb="tab"] p { font-family: "Saira Semi Condensed", sans-serif; font-size: 1.05rem;
+  font-weight: 600; }
 .stTabs button[data-baseweb="tab"][aria-selected="true"] { color: var(--tinta); }
 .stTabs [data-baseweb="tab-highlight"] { background: var(--termica); height: 3px; border-radius: 3px; }
 
@@ -1457,7 +1458,7 @@ def render_financeiro():
 CSS_CLIENTE = """
 <style>
 [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stSidebar"] { display: none !important; }
-.block-container { max-width: 760px; padding-top: 1rem; }
+.block-container { max-width: 760px; padding-top: 2.6rem; }
 .cli-total { font-family: "Saira Semi Condensed", sans-serif; font-size: 2.3rem; font-weight: 700;
   color: var(--dinheiro); line-height: 1.1; }
 .cli-contato { color: var(--tinta-suave); font-size: .9rem; margin: -6px 0 12px; }
