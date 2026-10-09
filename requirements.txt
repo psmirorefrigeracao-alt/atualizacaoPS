@@ -1,6 +1,6 @@
-streamlit
+streamlit>=1.65
 pandas
+altair>=5
 fpdf
 psycopg2-binary
 supabase
-
