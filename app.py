@@ -762,6 +762,20 @@ def dialog_excluir(os_id: str, cliente: str, total: float):
         st.rerun()
 
 
+def cb_selecionar_linha():
+    """Clique numa linha da tabela -> seleciona o orçamento e mostra as ações."""
+    ss = st.session_state
+    evento = ss.get("h_tabela") or {}
+    try:
+        selecao = evento["selection"] if isinstance(evento, dict) else evento.selection
+        linhas = selecao["rows"] if isinstance(selecao, dict) else selecao.rows
+    except Exception:
+        linhas = []
+    ids = ss.get("_h_ids", [])
+    if linhas and 0 <= linhas[0] < len(ids):
+        ss["h_sel"] = ids[linhas[0]]
+
+
 def render_historico():
     df = ler_base()
     if df.empty:
@@ -801,19 +815,21 @@ def render_historico():
         opcoes,
         format_func=lambda i: rotulos.get(i, i),
         key="h_sel",
-        placeholder=f"{len(opcoes)} orçamento(s) — escolha um para ver detalhes",
+        placeholder=f"{len(opcoes)} orçamento(s) — escolha um para ver PDF, WhatsApp, Editar...",
     )
 
-    if sel:
-        render_detalhe(df[df["ID"] == sel].iloc[0])
-
-    st.markdown("##### Todos os orçamentos")
+    st.caption("👆 Escolha na lista acima **ou toque numa linha da tabela** para abrir as ações (PDF, WhatsApp, Editar, Status, Excluir).")
     tabela = dff[["ID", "Data", "Cliente", "WhatsApp", "Status", "Total", "Itens"]].copy()
     tabela.insert(0, "Nº", tabela["ID"].map(formatar_id_pdf))
+    st.session_state["_h_ids"] = tabela["ID"].tolist()
     st.dataframe(
         tabela,
         width="stretch",
+        height=320,
         hide_index=True,
+        key="h_tabela",
+        on_select=cb_selecionar_linha,
+        selection_mode="single-row",
         column_config={
             "Nº": st.column_config.TextColumn("Nº", width="small"),
             "ID": st.column_config.TextColumn("ID", width="small"),
@@ -822,6 +838,9 @@ def render_historico():
         },
     )
     st.caption(f"{len(dff)} orçamento(s) · Total listado: {fmt_brl(dff['Total'].sum())}")
+
+    if sel:
+        render_detalhe(df[df["ID"] == sel].iloc[0])
 
 
 def render_detalhe(r):
