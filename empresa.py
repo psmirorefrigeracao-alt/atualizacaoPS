@@ -3,15 +3,15 @@
 
 EMPRESA = {
     "nome_fantasia": "P&S Refrigeração e Climatização",
-    "razao_social": "",                # ex.: "12.345.678 Fulano de Tal"
-    "cnpj": "",                        # ex.: "12.345.678/0001-90"
+    "razao_social": "62.967.478 Valmiro Almeida Pontes",                # ex.: "12.345.678 Fulano de Tal"
+    "cnpj": "62.967.478/0001-42",                        # ex.: "12.345.678/0001-90"
     "atividade": "Instalação e manutenção de sistemas de ar condicionado, climatização e refrigeração.",
-    "endereco": "",                    # ex.: "Rua Exemplo, 123 – Centro"
-    "cep_cidade": "",                  # ex.: "84000-000 - Cidade-PR"
+    "endereco": "Rua Nova Holanda, 95 – Cond. Conj. Milênio, Jardim Ceres",                    # ex.: "Rua Exemplo, 123 – Centro"
+    "cep_cidade": "84990-000 - Arapoti-PR",                  # ex.: "84000-000 - Cidade-PR"
     "telefone": "",                    # ex.: "(43) 99999-9999"  (também recebe o aviso de aprovação)
     "email": "",
     "site": "",
-    "tecnico": "",                     # técnico responsável
+    "tecnico": "Valmiro Almeida Pontes",                     # técnico responsável
     "cpf_tecnico": "",                 # deixe vazio para não mostrar
     "validade_dias": 5,
 

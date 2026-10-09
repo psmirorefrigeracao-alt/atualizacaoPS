@@ -442,7 +442,7 @@ def gerar_pdf_orcamento(orc: dict, itens: list, empresa: dict, logo_path: str = 
     linha_ass = "_" * 38
     assin = Table(
         [[Paragraph("<br/>".join(ass_emp), st["base"]), ""],
-         [Paragraph(f"<br/><br/>{linha_ass}<br/>{_t(nome_emp)}", st["peq"]),
+         [Paragraph(f"<br/><br/>{linha_ass}<br/>{_t(empresa.get('tecnico') or nome_emp)}<br/>{_t(nome_emp)}", st["peq"]),
           Paragraph(f"<br/><br/>{linha_ass}<br/>De acordo: {_t(orc.get('cliente'))}<br/>Data: ____/____/______",
                     st["peq"])]],
         colWidths=[LARGURA_UTIL / 2, LARGURA_UTIL / 2],
