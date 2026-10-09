@@ -1,32 +1,36 @@
 # app.py — P&S REFRIGERAÇÃO | Gestão de orçamentos (Streamlit + Supabase Postgres)
 # =============================================================================
-# Versão 2.0
-# - Mesma tabela do Supabase (public.orcamentos) e mesmos campos: nada muda no banco
-# - Botão "Editar" leva direto para a aba de edição, já preenchida
-# - Histórico com busca, filtro de status, itens, WhatsApp, troca rápida de status
-#   e exclusão com confirmação
-# - Dashboard financeiro: períodos rápidos, comparação com o período anterior,
-#   gráficos interativos, ranking de clientes, pendências e exportação CSV
-# - Datas lidas de forma robusta (texto dd/mm/aaaa, ISO ou coluna do tipo date)
-# - Link do WhatsApp sem "55" duplicado
+# Versão 3.0
+# - Mesma tabela do Supabase (public.orcamentos); só ACRESCENTA colunas opcionais
+#   (token, titulo, descritivo, pagamento, resposta_em, resposta_obs) — nada é apagado
+# - PDF profissional (pdf_orcamento.py) com dados da empresa (empresa.py)
+# - Aceite online: o cliente recebe um link pelo WhatsApp, aprova ou recusa,
+#   e o status é atualizado sozinho no sistema
+# - Área de gestão protegida por senha (APP_SENHA nos Secrets)
+# - Histórico, dashboard financeiro, busca, status rápido, exclusão com confirmação
 # =============================================================================
 
 import base64
+import hmac
 import json
 import os
 import re
+import secrets
 import urllib.parse
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import altair as alt
 import pandas as pd
 import psycopg2
 import psycopg2.extras
 import streamlit as st
-from fpdf import FPDF
+
+from empresa import EMPRESA
+from pdf_orcamento import gerar_pdf_orcamento
 
 
 # =========================
@@ -34,17 +38,32 @@ from fpdf import FPDF
 # =========================
 APP_NOME = "P&S REFRIGERAÇÃO"
 APP_SUBTITULO = "Gestão de orçamentos e serviços"
+APP_URL_PADRAO = "https://ps-refrigeracao.streamlit.app"
+FUSO = ZoneInfo("America/Sao_Paulo")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
-STATUS_OPCOES = ["Pendente", "Em Andamento", "Concluído", "Cancelado"]
-STATUS_ABERTOS = ["Pendente", "Em Andamento"]
+STATUS_OPCOES = ["Pendente", "Aprovado", "Em Andamento", "Concluído", "Recusado", "Cancelado"]
+STATUS_ABERTOS = ["Pendente", "Aprovado", "Em Andamento"]
+STATUS_APROVADOS = ["Aprovado", "Em Andamento", "Concluído"]
 CORES_STATUS = {
     "Concluído": "#1E9E62",
     "Em Andamento": "#2F6FD6",
+    "Aprovado": "#0FA3A3",
     "Pendente": "#E3A008",
+    "Recusado": "#D64545",
     "Cancelado": "#9AA4B2",
+}
+
+# Colunas opcionais acrescentadas à tabela (criadas automaticamente se não existirem)
+COLUNAS_EXTRAS = {
+    "token": "text",
+    "titulo": "text",
+    "descritivo": "text",
+    "pagamento": "text",
+    "resposta_em": "timestamptz",
+    "resposta_obs": "text",
 }
 COR_OUTROS = "#6B7785"
 
@@ -56,7 +75,10 @@ MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "
 
 PERIODOS = ["Este mês", "Mês passado", "Últimos 90 dias", "Este ano", "Ano passado", "Tudo", "Personalizado"]
 
-COLUNAS_BASE = ["ID", "Data", "Data_dt", "Cliente", "WhatsApp", "Status", "Total", "Itens", "ItensJSON"]
+COLUNAS_BASE = [
+    "ID", "Data", "Data_dt", "Cliente", "WhatsApp", "Status", "Total", "Itens", "ItensJSON",
+    "Token", "Titulo", "Descritivo", "Pagamento", "RespostaEm", "RespostaObs",
+]
 
 CSS = """
 <style>
@@ -120,18 +142,6 @@ def fmt_brl(valor) -> str:
 
 def fmt_pct(v: float) -> str:
     return f"{v * 100:.1f}%".replace(".", ",")
-
-
-def pdf_safe(txt) -> str:
-    """Evita UnicodeEncodeError no FPDF (latin-1)."""
-    if txt is None:
-        return ""
-    s = str(txt)
-    s = s.replace("•", "-").replace("–", "-").replace("—", "-")
-    s = s.replace("‘", "'").replace("’", "'")
-    s = s.replace("“", '"').replace("”", '"')
-    s = s.replace(" ", " ")
-    return s.encode("latin-1", "ignore").decode("latin-1")
 
 
 def para_data(v):
@@ -198,13 +208,57 @@ def whatsapp_url(numero, mensagem: str):
     return f"https://wa.me/{d}?text={urllib.parse.quote(mensagem)}"
 
 
-def mensagem_whatsapp(cliente: str, os_id: str, total: float) -> str:
-    return (
+def mensagem_whatsapp(cliente: str, os_id: str, total: float, link: str = "") -> str:
+    msg = (
         f"*{APP_NOME}*\n\n"
         f"Olá *{cliente}*, segue seu orçamento.\n"
         f"Nº: {formatar_id_pdf(os_id)}\n"
         f"Valor total: {fmt_brl(total)}"
     )
+    if link:
+        msg += (
+            "\n\n👉 Veja o orçamento completo, baixe o PDF e *aprove ou recuse* por aqui:\n"
+            f"{link}"
+        )
+    return msg
+
+
+def app_url() -> str:
+    try:
+        url = st.secrets.get("APP_URL")
+    except Exception:
+        url = None
+    return (url or APP_URL_PADRAO).rstrip("/")
+
+
+def link_cliente(token: str) -> str:
+    return f"{app_url()}/?orc={token}" if token else ""
+
+
+def dt_resposta(v):
+    """Data/hora da resposta como datetime com fuso (ou None)."""
+    if v is None or isinstance(v, (int, float)):
+        return None
+    if not isinstance(v, str) and pd.isna(v):
+        return None
+    if isinstance(v, str):
+        if not v.strip():
+            return None
+        try:
+            v = datetime.fromisoformat(v.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if isinstance(v, pd.Timestamp):
+        v = v.to_pydatetime()
+    if not isinstance(v, datetime):
+        return None
+    return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+
+
+def fmt_datahora(v) -> str:
+    """Data/hora da resposta do cliente no fuso de São Paulo."""
+    d = dt_resposta(v)
+    return d.astimezone(FUSO).strftime("%d/%m/%Y às %H:%M") if d else ""
 
 
 def get_logo_path() -> str:
@@ -334,6 +388,43 @@ def data_para_banco(d: date):
     return d.strftime("%d/%m/%Y")
 
 
+@st.cache_resource(show_spinner=False)
+def colunas_disponiveis() -> frozenset:
+    """Cria (se faltarem) as colunas opcionais e devolve as colunas que existem na tabela.
+    Só ACRESCENTA colunas vazias: nenhum dado existente é alterado."""
+    try:
+        with conexao() as conn:
+            with conn.cursor() as cur:
+                for nome, tipo in COLUNAS_EXTRAS.items():
+                    cur.execute(f"alter table public.orcamentos add column if not exists {nome} {tipo}")
+    except Exception:
+        pass  # sem permissão para alterar: o app segue funcionando sem os recursos novos
+    try:
+        with conexao() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select column_name from information_schema.columns
+                    where table_schema = 'public' and table_name = 'orcamentos'
+                    """
+                )
+                return frozenset(r[0] for r in cur.fetchall())
+    except Exception:
+        return frozenset()
+
+
+def tem_coluna(nome: str) -> bool:
+    return nome in colunas_disponiveis()
+
+
+def recursos_aceite_ok() -> bool:
+    return all(tem_coluna(c) for c in ("token", "resposta_em", "resposta_obs"))
+
+
+def novo_token() -> str:
+    return secrets.token_urlsafe(12)
+
+
 def montar_df(rows) -> pd.DataFrame:
     registros = []
     for r in rows:
@@ -350,27 +441,81 @@ def montar_df(rows) -> pd.DataFrame:
                 "Total": para_float(r.get("total")),
                 "Itens": str(r.get("itens") or ""),
                 "ItensJSON": str(r.get("itensjson") or ""),
+                "Token": str(r.get("token") or ""),
+                "Titulo": str(r.get("titulo") or ""),
+                "Descritivo": str(r.get("descritivo") or ""),
+                "Pagamento": str(r.get("pagamento") or ""),
+                "RespostaEm": dt_resposta(r.get("resposta_em")),
+                "RespostaObs": str(r.get("resposta_obs") or ""),
             }
         )
     df = pd.DataFrame(registros, columns=COLUNAS_BASE)
     df["Data_dt"] = pd.to_datetime(df["Data_dt"], errors="coerce")
     df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0.0).astype(float)
+    df["RespostaEm"] = df["RespostaEm"].astype(object)
     return df
+
+
+def _colunas_select() -> str:
+    base = ["id", "data", "cliente", "whatsapp", "status", "total", "itens", "itensjson"]
+    extras = [c for c in COLUNAS_EXTRAS if tem_coluna(c)]
+    return ", ".join(base + extras)
 
 
 @st.cache_data(ttl=60, show_spinner="Carregando dados...")
 def ler_base() -> pd.DataFrame:
     with conexao() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
-                select id, data, cliente, whatsapp, status, total, itens, itensjson
-                from public.orcamentos
-                order by created_at desc
-                """
-            )
+            cur.execute(f"select {_colunas_select()} from public.orcamentos order by created_at desc")
             rows = cur.fetchall()
     return montar_df(rows)
+
+
+def buscar_por_token(token: str):
+    """Um único orçamento pelo link do cliente (sem cache: sempre o dado mais novo)."""
+    if not token or not recursos_aceite_ok():
+        return None
+    with conexao() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"select {_colunas_select()} from public.orcamentos where token = %s", (token,))
+            rows = cur.fetchall()
+    df = montar_df(rows)
+    return None if df.empty else df.iloc[0]
+
+
+def registrar_resposta(token: str, aprovado: bool, obs: str) -> bool:
+    """Grava a resposta do cliente. Só vale para orçamento Pendente (não sobrescreve)."""
+    novo = "Aprovado" if aprovado else "Recusado"
+    with conexao() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update public.orcamentos
+                set status=%s, resposta_em=%s, resposta_obs=%s
+                where token=%s and status=%s
+                """,
+                (novo, datetime.now(timezone.utc), (obs or "").strip()[:500], token, "Pendente"),
+            )
+            ok = cur.rowcount > 0
+    _depois_de_gravar()
+    return ok
+
+
+def garantir_token(os_id: str, token_atual: str = "") -> str:
+    """Devolve o token do orçamento, criando um se ainda não existir (orçamentos antigos)."""
+    if token_atual or not recursos_aceite_ok():
+        return token_atual or ""
+    tok = novo_token()
+    with conexao() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "update public.orcamentos set token=%s where id=%s and (token is null or token='')",
+                (tok, os_id),
+            )
+            cur.execute("select token from public.orcamentos where id=%s", (os_id,))
+            r = cur.fetchone()
+    _depois_de_gravar()
+    return (r[0] if r else tok) or tok
 
 
 def _depois_de_gravar():
@@ -387,57 +532,66 @@ def gerar_novo_id(ano: int) -> str:
     return f"{ano}-{(max(seqs) + 1 if seqs else 1):03d}"
 
 
-def salvar_orcamento(reg: dict, data_ref: date) -> str:
-    """Insere um novo orçamento e devolve o ID gerado."""
+def _campos_extras(reg: dict) -> dict:
+    """Campos opcionais que só são gravados se a coluna existir no banco."""
+    extras = {}
+    for col, chave in (("titulo", "Titulo"), ("descritivo", "Descritivo"), ("pagamento", "Pagamento")):
+        if tem_coluna(col):
+            extras[col] = (reg.get(chave) or "").strip()
+    return extras
+
+
+def salvar_orcamento(reg: dict, data_ref: date):
+    """Insere um novo orçamento e devolve (ID, token)."""
     ultimo_erro = None
     for _ in range(3):
         os_id = gerar_novo_id(data_ref.year)
+        campos = {
+            "id": os_id,
+            "data": data_para_banco(data_ref),
+            "cliente": reg["Cliente"],
+            "whatsapp": reg["WhatsApp"],
+            "status": reg["Status"],
+            "total": float(reg["Total"]),
+            "itens": reg["Itens"],
+            "itensjson": reg["ItensJSON"],
+            **_campos_extras(reg),
+        }
+        tok = ""
+        if tem_coluna("token"):
+            tok = novo_token()
+            campos["token"] = tok
         try:
             with conexao() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """
-                        insert into public.orcamentos
-                        (id, data, cliente, whatsapp, status, total, itens, itensjson)
-                        values (%s,%s,%s,%s,%s,%s,%s,%s)
-                        """,
-                        (
-                            os_id,
-                            data_para_banco(data_ref),
-                            reg["Cliente"],
-                            reg["WhatsApp"],
-                            reg["Status"],
-                            float(reg["Total"]),
-                            reg["Itens"],
-                            reg["ItensJSON"],
-                        ),
+                        f"insert into public.orcamentos ({', '.join(campos)}) "
+                        f"values ({', '.join(['%s'] * len(campos))})",
+                        tuple(campos.values()),
                     )
             _depois_de_gravar()
-            return os_id
+            return os_id, tok
         except psycopg2.IntegrityError as e:  # ID já usado em outro aparelho: tenta o próximo
             ultimo_erro = e
     raise ultimo_erro
 
 
 def atualizar_orcamento(os_id: str, reg: dict, data_ref: date):
+    campos = {
+        "data": data_para_banco(data_ref),
+        "cliente": reg["Cliente"],
+        "whatsapp": reg["WhatsApp"],
+        "status": reg["Status"],
+        "total": float(reg["Total"]),
+        "itens": reg["Itens"],
+        "itensjson": reg["ItensJSON"],
+        **_campos_extras(reg),
+    }
     with conexao() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                update public.orcamentos
-                set data=%s, cliente=%s, whatsapp=%s, status=%s, total=%s, itens=%s, itensjson=%s
-                where id=%s
-                """,
-                (
-                    data_para_banco(data_ref),
-                    reg["Cliente"],
-                    reg["WhatsApp"],
-                    reg["Status"],
-                    float(reg["Total"]),
-                    reg["Itens"],
-                    reg["ItensJSON"],
-                    os_id,
-                ),
+                f"update public.orcamentos set {', '.join(f'{c}=%s' for c in campos)} where id=%s",
+                (*campos.values(), os_id),
             )
     _depois_de_gravar()
 
@@ -457,57 +611,33 @@ def excluir_orcamento(os_id: str):
 
 
 # =========================
-# PDF (mantido como estava — será reformulado na próxima etapa)
+# PDF (pdf_orcamento.py + dados de empresa.py)
 # =========================
-def gerar_pdf(os_id, cliente, whatsapp, data, status, df: pd.DataFrame, total: float) -> bytes:
-    pdf = FPDF(format="A4")
-    pdf.add_page()
-
-    id_pdf = formatar_id_pdf(os_id)
-
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 7, pdf_safe(APP_NOME), ln=True, align="C")
-
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 6, pdf_safe(f"Orçamento Nº {id_pdf}"), ln=True, align="C")
-    pdf.ln(6)
-
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 7, pdf_safe(f"Cliente: {cliente}"), ln=True)
-    pdf.cell(0, 7, pdf_safe(f"WhatsApp: {apenas_digitos(whatsapp)}"), ln=True)
-    pdf.cell(0, 7, pdf_safe(f"Data: {data}"), ln=True)
-    pdf.cell(0, 7, pdf_safe(f"Status: {status}"), ln=True)
-    pdf.ln(4)
-
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(110, 8, pdf_safe("Item"), 1)
-    pdf.cell(20, 8, pdf_safe("Qtd"), 1, align="C")
-    pdf.cell(30, 8, pdf_safe("V. Unit."), 1, align="R")
-    pdf.cell(30, 8, pdf_safe("Subtotal"), 1, align="R", ln=True)
-
-    pdf.set_font("Arial", "", 11)
-    for _, r in df.iterrows():
-        pdf.cell(110, 8, pdf_safe(str(r["Item"])), 1)
-        pdf.cell(20, 8, str(int(r["Qtd"])), 1, align="C")
-        pdf.cell(30, 8, pdf_safe(fmt_brl(float(r["Valor Unit."]))), 1, align="R")
-        pdf.cell(30, 8, pdf_safe(fmt_brl(float(r["Subtotal"]))), 1, align="R", ln=True)
-
-    pdf.ln(4)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(160, 10, pdf_safe("TOTAL:"), align="R")
-    pdf.cell(30, 10, pdf_safe(fmt_brl(float(total))), ln=True, align="R")
-
-    out = pdf.output(dest="S")
-    if isinstance(out, (bytes, bytearray)):
-        return bytes(out)
-    return out.encode("latin-1")
+def pdf_orcamento_bytes(r, link: str = "") -> bytes:
+    """PDF de um orçamento (registro do banco ou dict com as mesmas chaves)."""
+    itens = itens_json_para_df(r["ItensJSON"], r["Itens"], r["Total"])
+    itens_limpos, _, _, _ = limpar_calcular(itens)
+    orc = {
+        "id": r["ID"],
+        "numero": formatar_id_pdf(r["ID"]),
+        "cliente": r["Cliente"],
+        "whatsapp": r["WhatsApp"],
+        "data": r["Data"],
+        "titulo": r.get("Titulo", ""),
+        "descritivo": r.get("Descritivo", ""),
+        "pagamento": r.get("Pagamento", ""),
+        "total": float(r["Total"]),
+        "status": r["Status"],
+        "resposta_em": fmt_datahora(r.get("RespostaEm")),
+        "resposta_obs": r.get("RespostaObs", ""),
+    }
+    if r["Status"] != "Pendente":
+        link = ""
+    return gerar_pdf_orcamento(orc, itens_limpos.to_dict(orient="records"), EMPRESA, get_logo_path(), link)
 
 
 def pdf_do_registro(r) -> bytes:
-    """PDF de um orçamento salvo (com recuperação de itens de orçamentos antigos)."""
-    itens = itens_json_para_df(r["ItensJSON"], r["Itens"], r["Total"])
-    itens_limpos, _, _, _ = limpar_calcular(itens)
-    return gerar_pdf(r["ID"], r["Cliente"], r["WhatsApp"], r["Data"], r["Status"], itens_limpos, float(r["Total"]))
+    return pdf_orcamento_bytes(r, link_cliente(r.get("Token", "")))
 
 
 def nome_arquivo_pdf(os_id, cliente) -> str:
@@ -528,6 +658,9 @@ def _limpar_form():
     ss["f_whats"] = ""
     ss["f_data"] = date.today()
     ss["f_status"] = "Pendente"
+    ss["f_titulo"] = ""
+    ss["f_descritivo"] = ""
+    ss["f_pagamento"] = ""
     ss["itens_base"] = [dict(LINHA_VAZIA)]
     ss["chave_tabela"] = str(uuid.uuid4())
 
@@ -562,6 +695,9 @@ def cb_editar(os_id: str):
     ss["f_whats"] = r["WhatsApp"]
     ss["f_status"] = r["Status"] if r["Status"] in STATUS_OPCOES else "Pendente"
     ss["f_data"] = r["Data_dt"].date() if pd.notna(r["Data_dt"]) else date.today()
+    ss["f_titulo"] = r["Titulo"]
+    ss["f_descritivo"] = r["Descritivo"]
+    ss["f_pagamento"] = r["Pagamento"]
     itens = itens_json_para_df(r["ItensJSON"], r["Itens"], r["Total"])
     ss["itens_base"] = itens.to_dict(orient="records") or [dict(LINHA_VAZIA)]
     ss["chave_tabela"] = str(uuid.uuid4())
@@ -660,6 +796,14 @@ def render_novo():
             },
         )
 
+        with st.expander("📄 Detalhes para o PDF (opcional)", expanded=bool(ss.get("f_descritivo") or ss.get("f_titulo"))):
+            st.text_input("Título do orçamento", key="f_titulo",
+                          placeholder="Ex.: Instalação de sistema de climatização")
+            st.text_area("Descritivo dos serviços e equipamentos", key="f_descritivo", height=130,
+                         placeholder="Descreva o serviço. Linhas começando com - viram tópicos no PDF.")
+            st.text_area("Forma de pagamento", key="f_pagamento", height=80,
+                         placeholder="Vazio = texto padrão (definida em comum acordo entre as partes).")
+
         rotulo = "💾 Salvar alterações" if editando else "💾 Salvar orçamento"
         enviado = st.form_submit_button(rotulo, type="primary", width="stretch")
 
@@ -667,32 +811,53 @@ def render_novo():
         processar_salvar(tabela, editando)
 
     # Ações do último orçamento salvo
-    d = ss.get("ultimo_orcamento")
-    if d:
-        with st.container(border=True):
-            st.markdown(
-                f"**Orçamento Nº {formatar_id_pdf(d['id'])}** — {d['cliente']} · "
-                f"<span style='color:#1E9E62;font-weight:700'>{fmt_brl(d['total'])}</span>",
-                unsafe_allow_html=True,
-            )
-            c_pdf, c_whats, c_fechar = st.columns(3)
-            with c_pdf:
-                st.download_button(
-                    "📄 Baixar PDF",
-                    gerar_pdf(d["id"], d["cliente"], d["whatsapp"], d["data"], d["status"], d["tabela"], d["total"]),
-                    file_name=nome_arquivo_pdf(d["id"], d["cliente"]),
-                    mime="application/pdf",
-                    width="stretch",
-                    key="ult_pdf",
+    os_ult = ss.get("ultimo_orcamento")
+    if os_ult:
+        df = ler_base()
+        linha = df[df["ID"] == os_ult]
+        if linha.empty:
+            ss["ultimo_orcamento"] = None
+        else:
+            r = linha.iloc[0]
+            with st.container(border=True):
+                st.markdown(
+                    f"✅ **Orçamento Nº {formatar_id_pdf(r['ID'])}** — {r['Cliente']} · "
+                    f"<span style='color:#1E9E62;font-weight:700'>{fmt_brl(r['Total'])}</span>",
+                    unsafe_allow_html=True,
                 )
-            with c_whats:
-                url = whatsapp_url(d["whatsapp"], mensagem_whatsapp(d["cliente"], d["id"], d["total"]))
-                if url:
-                    st.link_button("🟢 Enviar WhatsApp", url, width="stretch")
-                else:
-                    st.button("🟢 Sem WhatsApp", disabled=True, width="stretch", key="ult_sem_whats")
-            with c_fechar:
-                st.button("➕ Novo orçamento", on_click=cb_fechar_ultimo, width="stretch", key="ult_fechar")
+                c_pdf, c_whats, c_fechar = st.columns(3)
+                acoes_envio(r, c_pdf, c_whats, prefixo="ult")
+                with c_fechar:
+                    st.button("➕ Novo orçamento", on_click=cb_fechar_ultimo, width="stretch", key="ult_fechar")
+
+
+def acoes_envio(r, col_pdf, col_whats, prefixo: str):
+    """Botões de PDF e WhatsApp (com link de aceite) de um orçamento."""
+    tok = r["Token"]
+    if not tok and r["Status"] == "Pendente":
+        try:
+            tok = garantir_token(r["ID"], tok)
+        except Exception:
+            tok = ""
+    link = link_cliente(tok) if r["Status"] == "Pendente" else ""
+    with col_pdf:
+        st.download_button(
+            "📄 PDF",
+            pdf_orcamento_bytes(r, link),
+            file_name=nome_arquivo_pdf(r["ID"], r["Cliente"]),
+            mime="application/pdf",
+            width="stretch",
+            key=f"{prefixo}_pdf_{r['ID']}",
+        )
+    with col_whats:
+        url = whatsapp_url(r["WhatsApp"], mensagem_whatsapp(r["Cliente"], r["ID"], r["Total"], link))
+        if url:
+            st.link_button("🟢 WhatsApp", url, width="stretch",
+                           help="Envia o orçamento com o link para o cliente aprovar ou recusar.")
+        else:
+            st.button("🟢 WhatsApp", disabled=True, width="stretch", key=f"{prefixo}_wpp_{r['ID']}",
+                      help="Este orçamento não tem número de WhatsApp.")
+    return link
 
 
 def processar_salvar(tabela, editando: bool):
@@ -715,6 +880,9 @@ def processar_salvar(tabela, editando: bool):
         "Total": total,
         "Itens": itens_txt,
         "ItensJSON": itens_json,
+        "Titulo": ss.get("f_titulo", ""),
+        "Descritivo": ss.get("f_descritivo", ""),
+        "Pagamento": ss.get("f_pagamento", ""),
     }
 
     try:
@@ -722,20 +890,12 @@ def processar_salvar(tabela, editando: bool):
             os_id = ss["id_edicao"]
             atualizar_orcamento(os_id, reg, data_ref)
         else:
-            os_id = salvar_orcamento(reg, data_ref)
+            os_id, _ = salvar_orcamento(reg, data_ref)
     except Exception as e:
         st.error(f"Não foi possível salvar no banco. Tente novamente. Detalhe: {e}")
         return
 
-    ss["ultimo_orcamento"] = {
-        "id": os_id,
-        "cliente": cliente,
-        "whatsapp": reg["WhatsApp"],
-        "data": fmt_data(data_ref),
-        "status": reg["Status"],
-        "tabela": tabela_limpa.copy(),
-        "total": total,
-    }
+    ss["ultimo_orcamento"] = os_id
     ss["_reset_form"] = True
     ss["_flash"] = f"Orçamento Nº {formatar_id_pdf(os_id)} salvo com sucesso!"
     st.rerun()
@@ -858,6 +1018,12 @@ def render_detalhe(r):
                 """,
                 unsafe_allow_html=True,
             )
+            if fmt_datahora(r["RespostaEm"]):
+                icone = "✅" if r["Status"] in STATUS_APROVADOS else "❌"
+                st.markdown(
+                    f"{icone} **Resposta do cliente** em {fmt_datahora(r['RespostaEm'])}"
+                    + (f" — _{r['RespostaObs']}_" if r["RespostaObs"] else "")
+                )
         with c_valor:
             st.markdown(
                 f'<div class="rotulo">Valor total</div><div class="valor-grande">{fmt_brl(r["Total"])}</div>',
@@ -879,22 +1045,7 @@ def render_detalhe(r):
 
         os_id = r["ID"]
         c_pdf, c_whats, c_edit, c_status, c_del = st.columns(5)
-        with c_pdf:
-            st.download_button(
-                "📄 PDF",
-                pdf_do_registro(r),
-                file_name=nome_arquivo_pdf(os_id, r["Cliente"]),
-                mime="application/pdf",
-                width="stretch",
-                key=f"h_pdf_{os_id}",
-            )
-        with c_whats:
-            url = whatsapp_url(r["WhatsApp"], mensagem_whatsapp(r["Cliente"], os_id, r["Total"]))
-            if url:
-                st.link_button("🟢 WhatsApp", url, width="stretch")
-            else:
-                st.button("🟢 WhatsApp", disabled=True, width="stretch", key=f"h_wpp_{os_id}",
-                          help="Este orçamento não tem número de WhatsApp.")
+        link = acoes_envio(r, c_pdf, c_whats, prefixo="h")
         with c_edit:
             st.button("✏️ Editar", on_click=cb_editar, args=(os_id,), width="stretch", key=f"h_edit_{os_id}")
         with c_status:
@@ -912,6 +1063,10 @@ def render_detalhe(r):
         with c_del:
             if st.button("🗑️ Excluir", width="stretch", key=f"h_del_{os_id}"):
                 dialog_excluir(os_id, r["Cliente"], float(r["Total"]))
+
+        if link:
+            st.caption("🔗 Link de aceite do cliente (vai junto na mensagem do WhatsApp e no QR code do PDF):")
+            st.code(link, language=None)
 
 
 # =========================
@@ -971,7 +1126,7 @@ def resumo(df: pd.DataFrame) -> dict:
     abertos = df[df["Status"].isin(STATUS_ABERTOS)]
     qtd = len(df)
     validos = len(df[df["Status"] != "Cancelado"])
-    aprovados = len(df[df["Status"].isin(["Concluído", "Em Andamento"])])
+    aprovados = len(df[df["Status"].isin(STATUS_APROVADOS)])
     return {
         "faturado": float(conc["Total"].sum()),
         "qtd_concluidos": len(conc),
@@ -1130,7 +1285,7 @@ def render_financeiro():
     k1.metric("💰 Faturado", fmt_brl(r["faturado"]), delta_pct(r["faturado"], ra["faturado"] if ra else None),
               border=True, help="Soma dos orçamentos com status Concluído no período.")
     k2.metric("⏳ Em aberto", fmt_brl(r["aberto"]), f"{r['qtd_abertos']} orçamento(s)", delta_color="off",
-              border=True, help="Pendente + Em Andamento: valor que ainda pode entrar.")
+              border=True, help="Pendente + Aprovado + Em Andamento: valor que ainda pode entrar.")
     k3.metric("📄 Orçamentos", r["qtd"], (r["qtd"] - ra["qtd"]) if ra else None,
               border=True, help="Quantidade de orçamentos emitidos no período (todos os status).")
     k4.metric("🎯 Ticket médio", fmt_brl(r["ticket"]), delta_pct(r["ticket"], ra["ticket"] if ra else None),
@@ -1138,7 +1293,7 @@ def render_financeiro():
     k5.metric("✅ Aprovação", fmt_pct(r["aprovacao"]),
               (f"{'+' if r['aprovacao'] - ra['aprovacao'] >= 0 else ''}{(r['aprovacao'] - ra['aprovacao']) * 100:.1f} p.p.".replace(".", ",")
                if ra and ra["qtd"] else None),
-              border=True, help="(Concluído + Em Andamento) ÷ orçamentos não cancelados.")
+              border=True, help="(Aprovado + Em Andamento + Concluído) ÷ orçamentos não cancelados.")
 
     if atual.empty:
         st.info("Nenhum orçamento neste período.")
@@ -1209,6 +1364,226 @@ def render_financeiro():
 # =========================
 # APP
 # =========================
+# =========================
+# PÁGINA DO CLIENTE (link do WhatsApp) — sem senha, só o orçamento do link
+# =========================
+CSS_CLIENTE = """
+<style>
+[data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stSidebar"] { display: none !important; }
+.block-container { max-width: 760px; padding-top: 1.2rem; }
+.cli-topo { display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:14px;
+            background:#1F2328; margin-bottom:14px; }
+.cli-topo img { height:54px; border-radius:6px; }
+.cli-topo .n { color:#fff; font-weight:700; font-size:1.1rem; }
+.cli-topo .s { color:#9FD0F0; font-size:.85rem; }
+.cli-total { font-size:2.1rem; font-weight:800; color:#1E9E62; line-height:1.1; }
+</style>
+"""
+
+
+def _validade(r):
+    dt = r["Data_dt"]
+    if pd.isna(dt):
+        return None
+    return dt.date() + timedelta(days=int(EMPRESA.get("validade_dias") or 5))
+
+
+def _contato_empresa_url(texto: str):
+    return whatsapp_url(EMPRESA.get("telefone", ""), texto) if EMPRESA.get("telefone") else None
+
+
+@st.dialog("Aprovar orçamento")
+def dialog_aprovar(token: str, numero: str):
+    st.write(f"Você confirma a **aprovação** do orçamento **Nº {numero}**?")
+    obs = st.text_area("Observação (opcional)", placeholder="Ex.: melhor dia para a instalação", key="dlg_obs_ap")
+    if st.button("✅ Confirmar aprovação", type="primary", width="stretch", key="dlg_ok_ap"):
+        _responder(token, True, obs)
+
+
+@st.dialog("Recusar orçamento")
+def dialog_recusar(token: str, numero: str):
+    st.write(f"Você deseja **recusar** o orçamento **Nº {numero}**?")
+    obs = st.text_area("Motivo (opcional)", placeholder="Ex.: valor acima do esperado", key="dlg_obs_rc")
+    if st.button("Confirmar recusa", type="primary", width="stretch", key="dlg_ok_rc"):
+        _responder(token, False, obs)
+
+
+def _responder(token: str, aprovado: bool, obs: str):
+    try:
+        ok = registrar_resposta(token, aprovado, obs)
+    except Exception:
+        st.error("Não foi possível registrar agora. Tente novamente em instantes.")
+        return
+    st.session_state["_resp_cliente"] = "ok" if ok else "ja"
+    st.rerun()
+
+
+def render_pagina_cliente(token: str):
+    st.markdown(CSS_CLIENTE, unsafe_allow_html=True)
+    logo = get_logo_path()
+    b64 = logo_cabecalho_b64(logo) if logo else ""
+    img = f'<img src="data:image/jpeg;base64,{b64}" alt="logo">' if b64 else ""
+    contato = " · ".join(x for x in [EMPRESA.get("telefone", ""), EMPRESA.get("email", "")] if x)
+    st.markdown(
+        f'<div class="cli-topo">{img}<div><div class="n">{EMPRESA.get("nome_fantasia") or APP_NOME}</div>'
+        f'<div class="s">{contato or APP_SUBTITULO}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    try:
+        r = buscar_por_token(str(token).strip())
+    except Exception:
+        st.error("Não foi possível carregar o orçamento agora. Tente novamente em instantes.")
+        return
+    if r is None:
+        st.error("Orçamento não encontrado. Confira o link recebido ou fale com a nossa equipe.")
+        return
+
+    numero = formatar_id_pdf(r["ID"])
+    resp = st.session_state.pop("_resp_cliente", None)
+    if resp == "ok":
+        st.balloons() if r["Status"] == "Aprovado" else None
+        st.success("Resposta registrada com sucesso. Obrigado! Nossa equipe já foi informada.")
+    elif resp == "ja":
+        st.info("Este orçamento já tinha uma resposta registrada.")
+
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            if r["Titulo"]:
+                st.markdown(f"**{r['Titulo']}**")
+            st.markdown(f"Orçamento **Nº {numero}** &nbsp;{badge_status(r['Status'])}", unsafe_allow_html=True)
+            st.markdown(f"Cliente: **{r['Cliente']}**")
+            val = _validade(r)
+            st.caption(f"Emitido em {r['Data']}" + (f" · válido até {fmt_data(val)}" if val else ""))
+        with c2:
+            st.markdown(f'<div class="rotulo">Valor total</div><div class="cli-total">{fmt_brl(r["Total"])}</div>',
+                        unsafe_allow_html=True)
+
+        itens = itens_json_para_df(r["ItensJSON"], r["Itens"], r["Total"])
+        itens_limpos, _, _, _ = limpar_calcular(itens)
+        if not itens_limpos.empty:
+            st.dataframe(
+                itens_limpos,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Valor Unit.": st.column_config.NumberColumn("Valor Unit.", format="R$ %.2f"),
+                    "Subtotal": st.column_config.NumberColumn("Subtotal", format="R$ %.2f"),
+                },
+            )
+        if r["Descritivo"]:
+            st.markdown("**Descritivo dos serviços**")
+            st.markdown(r["Descritivo"])
+        st.markdown("**Forma de pagamento**")
+        st.write(r["Pagamento"] or EMPRESA.get("pagamento_padrao", ""))
+
+        st.download_button(
+            "📄 Baixar orçamento em PDF",
+            pdf_orcamento_bytes(r, link_cliente(token)),
+            file_name=nome_arquivo_pdf(r["ID"], r["Cliente"]),
+            mime="application/pdf",
+            width="stretch",
+            key="cli_pdf",
+        )
+
+    status = r["Status"]
+    if status == "Pendente":
+        val = _validade(r)
+        if val and val < date.today():
+            st.warning(f"A validade deste orçamento terminou em {fmt_data(val)}. "
+                       "Você ainda pode responder, e confirmaremos os valores com você.")
+        st.markdown("#### O que você decide?")
+        b1, b2 = st.columns(2)
+        if b1.button("✅ Aprovar orçamento", type="primary", width="stretch", key="cli_aprovar"):
+            dialog_aprovar(token, numero)
+        if b2.button("❌ Recusar", width="stretch", key="cli_recusar"):
+            dialog_recusar(token, numero)
+    elif status in ("Aprovado", "Recusado"):
+        quando = fmt_datahora(r["RespostaEm"])
+        if status == "Aprovado":
+            st.success(f"✅ Orçamento **aprovado**{' em ' + quando if quando else ''}. "
+                       "Em breve entraremos em contato para agendar o serviço.")
+        else:
+            st.warning(f"Orçamento **recusado**{' em ' + quando if quando else ''}. "
+                       "Se quiser rever algum ponto, fale com a gente.")
+        url = _contato_empresa_url(
+            f"Olá! Sou {r['Cliente']} e acabei de {'aprovar' if status == 'Aprovado' else 'recusar'} "
+            f"o orçamento Nº {numero}."
+        )
+        if url:
+            st.link_button("💬 Avisar pelo WhatsApp", url, width="stretch")
+    else:
+        st.info(f"Situação atual do orçamento: **{status}**.")
+
+
+# =========================
+# ACESSO (senha da área de gestão)
+# =========================
+def senha_configurada() -> str:
+    try:
+        return str(st.secrets.get("APP_SENHA") or "")
+    except Exception:
+        return ""
+
+
+def cb_sair():
+    st.session_state["autenticado"] = False
+
+
+def exigir_login() -> bool:
+    senha = senha_configurada()
+    if not senha:
+        st.warning("⚠️ A área de gestão está **sem senha**. Configure `APP_SENHA` em Settings → Secrets "
+                   "no Streamlit Cloud para proteger os dados dos clientes.")
+        return True
+    if st.session_state.get("autenticado"):
+        return True
+    _, meio, _ = st.columns([1, 2, 1])
+    with meio:
+        with st.form("login", border=True):
+            st.markdown("##### 🔒 Acesso restrito")
+            digitada = st.text_input("Senha", type="password", key="login_senha")
+            entrar = st.form_submit_button("Entrar", type="primary", width="stretch")
+        if entrar:
+            if hmac.compare_digest(str(digitada).encode(), senha.encode()):
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+    return False
+
+
+def render_respostas_recentes():
+    """Aviso no topo quando clientes responderam pelo link nos últimos 7 dias."""
+    try:
+        df = ler_base()
+    except Exception:
+        return
+    if df.empty:
+        return
+    limite = datetime.now(timezone.utc) - timedelta(days=7)
+    recentes = []
+    for r in df.to_dict(orient="records"):
+        v = dt_resposta(r["RespostaEm"])
+        if v and v >= limite:
+            recentes.append((v, r))
+    if not recentes:
+        return
+    recentes.sort(key=lambda x: x[0], reverse=True)
+    linhas = []
+    for v, r in recentes[:5]:
+        acao = "aprovou ✅" if r["Status"] in STATUS_APROVADOS else ("recusou ❌" if r["Status"] == "Recusado" else "respondeu")
+        linhas.append(f"- **{r['Cliente']}** {acao} o Nº {formatar_id_pdf(r['ID'])} "
+                      f"({fmt_brl(r['Total'])}) — {fmt_datahora(v)}"
+                      + (f" · _{r['RespostaObs']}_" if r["RespostaObs"] else ""))
+    with st.expander(f"🔔 Respostas de clientes nos últimos 7 dias ({len(recentes)})", expanded=True):
+        st.markdown("\n".join(linhas))
+
+
+# =========================
+# APP
+# =========================
 def criar_abas():
     """Abas com estado (permite o botão Editar abrir a aba certa)."""
     nomes = [ABA_NOVO, ABA_HIST, ABA_FIN]
@@ -1219,9 +1594,21 @@ def criar_abas():
 
 
 def main():
+    token = st.query_params.get("orc")
+    if token:
+        st.set_page_config(page_title="Orçamento - P&S Refrigeração", page_icon="❄️", layout="centered")
+        render_pagina_cliente(token)
+        return
+
     st.set_page_config(page_title="PS REFRIGERAÇÃO - Gestão", page_icon="❄️", layout="wide")
     init_state()
     render_cabecalho()
+    if not exigir_login():
+        return
+    if senha_configurada():
+        _, c_sair = st.columns([6, 1])
+        c_sair.button("🔒 Sair", on_click=cb_sair, width="stretch", key="btn_sair")
+    render_respostas_recentes()
 
     tab_novo, tab_hist, tab_fin = criar_abas()
     with tab_novo:
