@@ -1473,7 +1473,13 @@ def _validade(r):
 
 
 def _contato_empresa_url(texto: str):
-    return whatsapp_url(EMPRESA.get("telefone", ""), texto) if EMPRESA.get("telefone") else None
+    """WhatsApp da empresa: usa o campo 'whatsapp' ou o telefone, se for celular."""
+    numero = EMPRESA.get("whatsapp") or ""
+    if not numero:
+        tel = apenas_digitos(EMPRESA.get("telefone", ""))
+        if len(tel) == 11 and tel[2] == "9":  # DDD + celular (9xxxx-xxxx)
+            numero = tel
+    return whatsapp_url(numero, texto) if numero else None
 
 
 @st.dialog("Aprovar orçamento")
