@@ -11,7 +11,7 @@ EMPRESA = {
     "telefone": "(43) 3300-2908",                    # ex.: "(43) 99999-9999"  (também recebe o aviso de aprovação)
     "email": "ps.refrigeracao66@gmail.com",
     "site": "",
-    "whatsapp": "",                    # celular com WhatsApp, ex.: "(43) 99999-9999" (botão "Avisar pelo WhatsApp")
+    "whatsapp": "(43) 3300-2908",      # WhatsApp Business da empresa (botão "Avisar pelo WhatsApp")
     "tecnico": "Valmiro Almeida Pontes",                     # técnico responsável
     "cpf_tecnico": "",                 # deixe vazio para não mostrar
     "validade_dias": 5,
