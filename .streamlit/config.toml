@@ -21,5 +21,9 @@ greenColor = "#2FBF7A"
 redColor = "#F0566B"
 chartCategoricalColors = ["#2A9F63", "#4B74F0", "#0EA5A5", "#CF7313", "#A07BDB", "#E5466A"]
 
+[runner]
+# Não exibir na tela valores soltos do código (evita "telas de código")
+magicEnabled = false
+
 [client]
 toolbarMode = "minimal"

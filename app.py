@@ -1529,7 +1529,8 @@ def render_pagina_cliente(token: str):
     numero = formatar_id_pdf(r["ID"])
     resp = st.session_state.pop("_resp_cliente", None)
     if resp == "ok":
-        st.balloons() if r["Status"] == "Aprovado" else None
+        if r["Status"] == "Aprovado":
+            st.balloons()
         st.success("Resposta registrada com sucesso. Obrigado! Nossa equipe já foi informada.")
     elif resp == "ja":
         st.info("Este orçamento já tinha uma resposta registrada.")
